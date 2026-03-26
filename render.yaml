@@ -1,0 +1,20 @@
+# render.yaml – Render Blueprint for Paperra
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: paperra
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
