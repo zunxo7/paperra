@@ -6,6 +6,7 @@ import {
   type QualificationLevel,
 } from '../syllabusCatalog';
 import { MAX_YEAR, MIN_YEAR } from '../lib/paperLinkConstants';
+import { vercelApiUrl } from '../lib/vercelApiUrl';
 
 type Props = {
   open: boolean;
@@ -86,7 +87,7 @@ export function AdminPanel({ open, onClose, token, onToken }: Props) {
   const fetchLastRefreshes = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/admin/last-refreshes', {
+      const res = await fetch(vercelApiUrl('admin/last-refreshes'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401) {
@@ -130,7 +131,7 @@ export function AdminPanel({ open, onClose, token, onToken }: Props) {
     }
     setLoadingEst(true);
     try {
-      const res = await fetch('/api/admin/estimate', {
+      const res = await fetch(vercelApiUrl('admin/estimate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -175,7 +176,7 @@ export function AdminPanel({ open, onClose, token, onToken }: Props) {
     e.preventDefault();
     setLoginError('');
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await fetch(vercelApiUrl('admin/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
@@ -197,7 +198,7 @@ export function AdminPanel({ open, onClose, token, onToken }: Props) {
 
   const handleLogout = async () => {
     try {
-      await fetch('/api/admin/logout', {
+      await fetch(vercelApiUrl('admin/logout'), {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -220,7 +221,7 @@ export function AdminPanel({ open, onClose, token, onToken }: Props) {
     }
     setClearing(true);
     try {
-      const res = await fetch('/api/admin/clear-catalog', {
+      const res = await fetch(vercelApiUrl('admin/clear-catalog'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -248,7 +249,7 @@ export function AdminPanel({ open, onClose, token, onToken }: Props) {
     setRefreshing(true);
     setRefreshResult(null);
     try {
-      const res = await fetch('/api/admin/refresh', {
+      const res = await fetch(vercelApiUrl('admin/refresh'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
