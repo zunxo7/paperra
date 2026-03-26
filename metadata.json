@@ -1,0 +1,5 @@
+{
+  "name": "CS Paper Topic Extractor",
+  "description": "Extract and categorize IGCSE/O Level Computer Science questions by syllabus topic using semantic search.",
+  "requestFramePermissions": []
+}
