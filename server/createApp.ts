@@ -3,6 +3,7 @@ import fetch from "node-fetch";
 import adminRouter from "./adminRouter.ts";
 import catalogRouter from "./catalogApi.ts";
 import { finalUrlMatchesExpectedPastPaperPdf } from "./papaCambridgePdfResponse.ts";
+import { vercelRewritePathMiddleware } from "./vercelPathMiddleware.ts";
 
 /**
  * Express app with API routes only. Used by `server.ts` (local dev) and the esbuild output `api/index.js` (Vercel).
@@ -10,6 +11,7 @@ import { finalUrlMatchesExpectedPastPaperPdf } from "./papaCambridgePdfResponse.
  */
 export function createApp(): express.Express {
   const app = express();
+  app.use(vercelRewritePathMiddleware);
   app.use(express.json());
 
   app.use("/api/catalog", catalogRouter);
