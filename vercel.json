@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api/index?__pathname=$1"
+      "destination": "/api?__pathname=$1"
     },
     {
       "source": "/((?!api/).*)",

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 /**
- * Vercel rewrite sends `/api/admin/login` → `/api/index?...` and drops the original path,
+ * Vercel rewrite sends `/api/admin/login` → `/api?__pathname=...` (api/index.js is mounted at `/api`, not `/api/index`).
  * so Express sees `/` and no route matches (POST → 405, GET proxy → wrong handler / SPA HTML).
  * We pass the tail in `__pathname` via `vercel.json` and reconstruct `req.url` here.
  */
