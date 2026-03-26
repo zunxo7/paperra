@@ -1,2 +1,2 @@
-# Local dev server only — production API is the bundled `api/index.mjs` (see `package.json` build).
+# Local dev server only — production API is the bundled `api/index.js` (see `package.json` build).
 server.ts

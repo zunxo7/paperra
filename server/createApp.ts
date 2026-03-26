@@ -5,7 +5,7 @@ import catalogRouter from "./catalogApi.ts";
 import { finalUrlMatchesExpectedPastPaperPdf } from "./papaCambridgePdfResponse.ts";
 
 /**
- * Express app with API routes only. Used by `server.ts` (local dev) and the esbuild output `api/index.mjs` (Vercel).
+ * Express app with API routes only. Used by `server.ts` (local dev) and the esbuild output `api/index.js` (Vercel).
  * Static assets are served separately by Vite in dev and by Vercel from `dist/` in production.
  */
 export function createApp(): express.Express {
