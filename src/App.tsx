@@ -30,6 +30,7 @@ import {
   MAX_YEAR,
   MIN_YEAR,
   SESSION_CODES as SESSION_OPTIONS,
+  DEFAULT_VARIANTS_BEFORE_CATALOG,
   VARIANT_CODES as VARIANT_CANDIDATES,
 } from './lib/paperLinkConstants';
 
@@ -79,7 +80,9 @@ export default function App() {
   const [selectedSessions, setSelectedSessions] = useState<string[]>(['W']);
   const [startYear, setStartYear] = useState(2025);
   const [endYear, setEndYear] = useState(2025);
-  const [selectedVariants, setSelectedVariants] = useState<string[]>(['12']);
+  const [selectedVariants, setSelectedVariants] = useState<string[]>([
+    ...DEFAULT_VARIANTS_BEFORE_CATALOG,
+  ]);
   /** `undefined` = fetching; `null` = no Turso (show all subjects); `[]` = none refreshed; else codes from `syllabus_catalog_refresh` */
   const [refreshedSyllabusCodes, setRefreshedSyllabusCodes] = useState<string[] | null | undefined>(undefined);
   /** `undefined` = fetching; `null` = no Turso rows for syllabus (show full static list); `[]` = catalog has rows but no QP available; else only variants that worked in shared DB */
@@ -1130,8 +1133,8 @@ export default function App() {
     [refreshedSyllabusCodes, selectedSyllabusCode]
   );
 
-  const resolvedVariantOptions = useMemo((): string[] | undefined => {
-    if (catalogQpVariants === undefined) return undefined;
+  const resolvedVariantOptions = useMemo((): string[] => {
+    if (catalogQpVariants === undefined) return [...DEFAULT_VARIANTS_BEFORE_CATALOG];
     if (catalogQpVariants === null) {
       if (strictCatalogSubject) return [];
       return [...VARIANT_CANDIDATES];
@@ -1140,7 +1143,6 @@ export default function App() {
   }, [catalogQpVariants, strictCatalogSubject]);
 
   useEffect(() => {
-    if (resolvedVariantOptions === undefined) return;
     const opts = resolvedVariantOptions;
     setSelectedVariants((prev) => {
       if (opts.length === 0) return [];
@@ -1587,9 +1589,7 @@ export default function App() {
 
               <div className="space-y-2">
                 <label className="text-[10px] font-mono uppercase opacity-50">Paper variant</label>
-                {resolvedVariantOptions === undefined ? (
-                  <p className="text-[10px] font-mono opacity-50">Loading variants from shared catalog…</p>
-                ) : resolvedVariantOptions.length === 0 ? (
+                {resolvedVariantOptions.length === 0 ? (
                   <p className="text-[10px] font-mono text-amber-800">
                     No QP links marked available in the shared catalog for this syllabus. Run an admin link refresh for
                     this subject or choose another.
