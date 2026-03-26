@@ -3,15 +3,13 @@ import fetch from "node-fetch";
 import adminRouter from "./adminRouter.ts";
 import catalogRouter from "./catalogApi.ts";
 import { finalUrlMatchesExpectedPastPaperPdf } from "./papaCambridgePdfResponse.ts";
-import { vercelRewritePathMiddleware } from "./vercelPathMiddleware.ts";
 
 /**
- * Express app with API routes only. Used by `server.ts` (local dev) and the esbuild output `api/index.js` (Vercel).
- * Static assets are served separately by Vite in dev and by Vercel from `dist/` in production.
+ * Express app with API routes only. Used by `server.ts` (local dev & production on Render).
+ * Static assets are served separately by Vite in dev and by Express from `dist/` in production.
  */
 export function createApp(): express.Express {
   const app = express();
-  app.use(vercelRewritePathMiddleware);
   app.use(express.json());
 
   app.use("/api/catalog", catalogRouter);

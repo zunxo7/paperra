@@ -1,4 +1,0 @@
-import { createApp } from "./createApp.ts";
-
-/** Bundled by esbuild into `api/index.js` for Vercel (see `package.json` `build` script). */
-export default createApp();
