@@ -1,2 +1,2 @@
-# Local dev server only — production API is `api/index.ts` (Vite is not bundled into the function).
+# Local dev server only — production API is the bundled `api/index.mjs` (see `package.json` build).
 server.ts

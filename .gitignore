@@ -1,6 +1,7 @@
 node_modules/
 build/
 dist/
+api/index.mjs
 coverage/
 .turbo/
 .vercel/
