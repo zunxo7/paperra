@@ -47,6 +47,13 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(false);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [user, setUser] = useState<{ username: string; token: string; filterLimit: number } | null>(null);
+
+  const [syllabusPdfUrl, setSyllabusPdfUrl] = useState('');
+  const [topics, setTopics] = useState<{ unitId: string; title: string }[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [topicsError, setTopicsError] = useState('');
+  const [questionTopicMappings, setQuestionTopicMappings] = useState<Record<string, string>>({});
+  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string>('');
   const [adminToken, setAdminTokenState] = useState<string | null>(() => {
     try {
       return sessionStorage.getItem('paperra_admin_token');
@@ -1459,7 +1466,64 @@ export default function App() {
     setPreviewIndex(0);
   };
 
-  const filteredQuestions = questions;
+  const filteredQuestions = useMemo(() => {
+    if (!selectedTopicFilter) return questions;
+    // Map topic ID or full string to matched topic; if it says "1.1", ensure it matches.
+    return questions.filter(q => {
+      const mapped = questionTopicMappings[q.id];
+      if (!mapped) return false;
+      return mapped === selectedTopicFilter || mapped.startsWith(selectedTopicFilter);
+    });
+  }, [questions, selectedTopicFilter, questionTopicMappings]);
+
+  const handleFilterWithAI = async () => {
+    if (!syllabusPdfUrl) return setTopicsError('Please enter a syllabus PDF URL.');
+    if (!user) return setTopicsError('Login required.');
+    if (user.filterLimit <= 0) return setTopicsError('Filter limit reached.');
+    
+    setTopicsLoading(true);
+    setTopicsError('');
+    try {
+      const u = syllabusPdfUrl.startsWith('/') 
+        ? `https://www.cambridgeinternational.org${syllabusPdfUrl}` 
+        : syllabusPdfUrl;
+
+      const fullUrl = apiUrl(`proxy-pdf?url=${encodeURIComponent(u)}`);
+      const pdf = await pdfjsLib.getDocument({
+        url: fullUrl,
+        cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+        cMapPacked: true,
+        standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
+      }).promise;
+      
+      const text = await extractTextFromPdf(pdf, 1);
+      
+      const qsToSend = questions.map(q => ({
+        id: q.id,
+        text: q.questionText || ''
+      }));
+
+      const res = await fetch(apiUrl('topics/filter-questions'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`
+        },
+        body: JSON.stringify({ syllabusText: cleanPdfTextForAI(text), questions: qsToSend })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setTopics(data.topics);
+      setQuestionTopicMappings(data.mappings);
+      setUser({ ...user, filterLimit: data.newLimit });
+      setSelectedTopicFilter('');
+    } catch (e: any) {
+      setTopicsError(e.message);
+    } finally {
+      setTopicsLoading(false);
+    }
+  };
   const selectedSyllabusLabel = getSyllabusLabel(selectedSyllabusCode);
   const generatedLinkCount = paperLinks.length;
 
@@ -1707,11 +1771,65 @@ export default function App() {
             </div>
           ) : (
             <div className="space-y-4">
-              <div className="flex justify-between items-end border-b border-[#141414] pb-2">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between border-b border-[#141414] pb-3 gap-3">
                 <h2 className="text-xl font-serif italic">
                   {selectedSyllabusLabel}
                 </h2>
-                <p className="text-[10px] font-mono uppercase opacity-50">{filteredQuestions.length} Results Found</p>
+
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                  <p className="text-[10px] font-mono uppercase opacity-50 shrink-0">
+                    {filteredQuestions.length} Results Found
+                  </p>
+                </div>
+              </div>
+
+              {/* AI Filter Unit */}
+              <div className="border border-[#141414] bg-white p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider">AI Syllabus Filter</h3>
+                  <span className="text-[10px] font-mono opacity-60">1 Filter = 1 request</span>
+                </div>
+                
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input 
+                    type="url" 
+                    placeholder="Syllabus PDF URL (e.g. from Cambridge org)" 
+                    className="flex-1 text-xs px-3 py-2 border border-[#141414] disabled:opacity-50"
+                    value={syllabusPdfUrl}
+                    onChange={(e) => setSyllabusPdfUrl(e.target.value)}
+                    disabled={topicsLoading}
+                  />
+                  <button 
+                    onClick={handleFilterWithAI}
+                    disabled={topicsLoading || !user}
+                    className="shrink-0 px-4 py-2 border border-[#141414] bg-[#141414] text-white text-[10px] font-bold uppercase hover:opacity-90 disabled:opacity-50 transition-all"
+                  >
+                    {topicsLoading ? 'Extracting & Mapping...' : 'Auto-Map Questions'}
+                  </button>
+                </div>
+
+                {!user && (
+                   <p className="text-[10px] font-mono text-red-700">Login required to use the AI filter limits.</p>
+                )}
+                {topicsError && (
+                   <p className="text-[10px] font-mono text-red-700">{topicsError}</p>
+                )}
+
+                {topics.length > 0 && (
+                  <div className="pt-3 border-t border-[#141414] border-opacity-10">
+                    <label className="text-[10px] font-mono uppercase opacity-70 block mb-1">Filter by Topic:</label>
+                    <select 
+                      className="w-full text-xs px-2 py-1.5 border border-[#141414]"
+                      value={selectedTopicFilter}
+                      onChange={(e) => setSelectedTopicFilter(e.target.value)}
+                    >
+                      <option value="">All Topics</option>
+                      {topics.map(t => (
+                        <option key={t.unitId} value={t.unitId}>{t.unitId} - {t.title}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
               <div className="grid gap-4">
@@ -1733,6 +1851,11 @@ export default function App() {
                           >
                             {q.paperId}
                           </span>
+                          {questionTopicMappings[q.id] && (
+                            <span className="text-[10px] bg-[#141414] text-white px-2 py-0.5 mt-1 inline-block w-max rounded-sm">
+                              Topic: {questionTopicMappings[q.id]}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>

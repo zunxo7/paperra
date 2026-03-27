@@ -12,7 +12,7 @@ export const userRouter = Router();
 // For now, let's just use DB for sessions to be safe, or just memory since it's a small app.
 // I'll use a simple in-memory map for now, just like adminAuth, to avoid complex DB session management if not strictly required,
 // but since we want persistence, I'll provide an endpoint that returns the user info.
-const sessions = new Map<string, { userId: number; username: string; filterLimit: number }>();
+export const sessions = new Map<string, { userId: number; username: string; filterLimit: number }>();
 
 userRouter.post('/register', async (req, res) => {
   try {

@@ -17,21 +17,13 @@ async function run() {
   }
 
   try {
-    console.log('Creating users table...');
+    console.log('Creating question_topics table...');
     await client.execute(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        username TEXT UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        filter_limit INTEGER DEFAULT 10,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      
       CREATE TABLE IF NOT EXISTS question_topics (
         question_id TEXT PRIMARY KEY,
         unit_id TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
+      )
     `);
     console.log('Success! Table initialized.');
     process.exit(0);

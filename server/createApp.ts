@@ -5,6 +5,7 @@ import catalogRouter from "./catalogApi.ts";
 import { finalUrlMatchesExpectedPastPaperPdf } from "./papaCambridgePdfResponse.ts";
 
 import { userRouter } from "./userRouter.ts";
+import { topicFilterRouter } from "./topicFilterRouter.ts";
 
 /**
  * Express app with API routes only. Used by `server.ts` (local dev & production on Render).
@@ -17,6 +18,7 @@ export function createApp(): express.Express {
   app.use("/api/catalog", catalogRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/user", userRouter);
+  app.use("/api/topics", topicFilterRouter);
 
   app.get("/api/proxy-pdf", async (req, res) => {
     const url = req.query.url as string;
