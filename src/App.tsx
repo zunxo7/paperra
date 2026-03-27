@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AdminPanel } from './components/AdminPanel';
+import { UserAuthModal } from './components/UserAuthModal';
 import * as pdfjsLib from 'pdfjs-dist';
 import { 
   FileText, 
@@ -7,7 +8,9 @@ import {
   BookOpen, 
   CheckCircle2,
   Link as LinkIcon,
-  X
+  X,
+  User,
+  LogOut
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Question } from './types';
@@ -33,6 +36,7 @@ import {
   DEFAULT_VARIANTS_BEFORE_CATALOG,
   VARIANT_CODES as VARIANT_CANDIDATES,
 } from './lib/paperLinkConstants';
+import { apiUrl } from './lib/apiUrl';
 
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
@@ -41,6 +45,8 @@ const YEAR_OPTIONS = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => M
 
 export default function App() {
   const [adminOpen, setAdminOpen] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [user, setUser] = useState<{ username: string; token: string; filterLimit: number } | null>(null);
   const [adminToken, setAdminTokenState] = useState<string | null>(() => {
     try {
       return sessionStorage.getItem('paperra_admin_token');
@@ -1474,7 +1480,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans">
-      <header className="border-b border-[#141414] p-6 flex items-center bg-white">
+      <header className="border-b border-[#141414] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -1493,6 +1499,38 @@ export default function App() {
               for Cambridge O Level, IGCSE and A &amp; AS Level
             </p>
           </div>
+        </div>
+        
+        <div className="flex items-center">
+          {user ? (
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] font-mono opacity-70">
+                Hi, <strong className="font-sans text-xs">{user.username}</strong>
+                <br />
+                Limit: {user.filterLimit}
+              </span>
+              <button
+                onClick={() => {
+                  setUser(null);
+                  fetch(apiUrl('user/logout'), { method: 'POST', headers: { Authorization: `Bearer ${user.token}` } }).catch(() => {});
+                }}
+                className="flex items-center gap-1.5 border border-[#141414] px-3 py-1.5 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414]"
+                aria-label="Logout"
+              >
+                <LogOut className="w-3.5 h-3.5" strokeWidth={2} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">Log out</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setUserModalOpen(true)}
+              className="flex items-center gap-1.5 border border-[#141414] bg-[#141414] text-white px-3 py-1.5 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414]"
+              aria-label="Login"
+            >
+              <User className="w-3.5 h-3.5" strokeWidth={2} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Sign In</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -1846,10 +1884,20 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="mt-12 border-t border-[#141414] p-8 bg-white text-center">
+      <footer className="mt-12 border-t border-[#141414] p-8 bg-white flex flex-col items-center justify-center gap-4">
         <p className="text-[10px] font-mono uppercase tracking-widest opacity-50">
-          Powered by GPT-5 Nano · Paperra
+          Powered by GPT-5 Nano & PapaCambridge
         </p>
+        <a 
+          href="https://www.linkedin.com/in/zunnoon-jawad-3b236a37b/" 
+          target="_blank" 
+          rel="noreferrer"
+           className="opacity-50 hover:opacity-100 transition-opacity"
+        >
+          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+            <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+          </svg>
+        </a>
       </footer>
 
       {previewImages && (
@@ -1972,6 +2020,11 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
+      <UserAuthModal 
+        open={userModalOpen} 
+        onClose={() => setUserModalOpen(false)} 
+        onLoginSuccess={(u) => setUser(u)} 
+      />
     </div>
   );
 }

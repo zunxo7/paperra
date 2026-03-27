@@ -4,6 +4,8 @@ import adminRouter from "./adminRouter.ts";
 import catalogRouter from "./catalogApi.ts";
 import { finalUrlMatchesExpectedPastPaperPdf } from "./papaCambridgePdfResponse.ts";
 
+import { userRouter } from "./userRouter.ts";
+
 /**
  * Express app with API routes only. Used by `server.ts` (local dev & production on Render).
  * Static assets are served separately by Vite in dev and by Express from `dist/` in production.
@@ -14,6 +16,7 @@ export function createApp(): express.Express {
 
   app.use("/api/catalog", catalogRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/user", userRouter);
 
   app.get("/api/proxy-pdf", async (req, res) => {
     const url = req.query.url as string;
