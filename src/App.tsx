@@ -2166,7 +2166,6 @@ export default function App() {
           ? `<div style="border-top:2px solid #2563eb;background:#eff6ff;"><div style="padding:10px 20px 6px;font-size:8px;font-weight:700;letter-spacing:2.5px;color:#2563eb;font-family:monospace;">&#10003; MARK SCHEME</div><div style="padding:0 20px 16px;">${singleImg(stitchedMs)}</div></div>`
           : '';
         const msTableHtml = msSection ? `<table style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
-          <tr><td style="padding:0;"><div style="background:#666666;color:#fff;padding:12px 20px;text-align:center;font-size:10px;font-weight:700;letter-spacing:2px;font-family:helvetica,sans-serif;cursor:pointer;">BACK TO QUESTION</div></td></tr>
           <tr><td style="padding:16px 20px 10px;">
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
               <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
@@ -2174,6 +2173,7 @@ export default function App() {
             </div>
           </td></tr>
           <tr><td style="padding:0;">${msSection}</td></tr>
+          <tr><td style="padding:0;"><div style="background:#666666;color:#fff;padding:12px 20px;text-align:center;font-size:10px;font-weight:700;letter-spacing:2px;font-family:helvetica,sans-serif;cursor:pointer;">BACK TO QUESTION</div></td></tr>
         </table>` : null;
         return {
           qHtml: `<table data-qi="${selectedQuestions.indexOf(q)}" style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
@@ -2321,91 +2321,105 @@ ${msAtEndHtml}
         }
       }
 
-      // Render per-question MS pages, then add "SHOW MARK SCHEME" button overlays
+      // Render all MS pages batched together (tightly packed like QP), then add link annotations
       if (interleavedMsParts.length > 0) {
-        // Map from question index → first PDF page of its MS
         const msPageByQIdx: Record<number, number> = {};
-        // Map from question index → first PDF page of question in questions section
         const qPageByQIdx: Record<number, number> = {};
-        // Calculate which PDF page each question is on
+
+        // Calculate which PDF page each question card is on
         const questionsElRect3 = questionsEl.getBoundingClientRect();
         for (let i = 0; i < exportParts.length; i++) {
           const tableEl = questionsEl.querySelector(`table[data-qi="${i}"]`) as HTMLElement | null;
           if (!tableEl) continue;
           const tableRect = tableEl.getBoundingClientRect();
           const cardTopPx = (tableRect.top - questionsElRect3.top) * 2;
-          const pageIdx = Math.floor(cardTopPx / sliceHeightPx);
-          qPageByQIdx[i] = 2 + pageIdx; // +2: cover is page 1, questions start at page 2
+          qPageByQIdx[i] = 2 + Math.floor(cardTopPx / sliceHeightPx);
         }
 
-        for (const { idx, msHtml } of interleavedMsParts) {
-          const msWrap = document.createElement('div');
-          msWrap.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;background:#fff;pointer-events:none;';
-          msWrap.innerHTML = `<div style="padding:53px 68px;width:794px;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">${msHtml}</div>`;
-          document.body.appendChild(msWrap);
-          await Promise.all(Array.from(msWrap.querySelectorAll('img')).map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
-          await new Promise(r => setTimeout(r, 80));
+        // Batch all MS HTML into one container (tightly packed)
+        const allMsHtml = interleavedMsParts.map(({ idx, msHtml }) =>
+          msHtml!.replace('<table ', `<table data-msi="${idx}" `)
+        ).join('');
 
-          msPageByQIdx[idx] = pdf.getNumberOfPages() + 1;
-          const msCanvas = await html2canvas(msWrap.children[0] as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+        const msBatchWrap = document.createElement('div');
+        msBatchWrap.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;background:#fff;pointer-events:none;';
+        const msBatchInner = document.createElement('div');
+        msBatchInner.style.cssText = 'padding:53px 68px;width:794px;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;';
+        msBatchInner.innerHTML = allMsHtml;
+        msBatchWrap.appendChild(msBatchInner);
+        document.body.appendChild(msBatchWrap);
 
-          // Track back button position for link annotation
-          const msWrapInner = msWrap.children[0] as HTMLElement;
-          const msWrapInnerRect = msWrapInner.getBoundingClientRect();
-          const backBtnRow = msWrap.querySelector('table tr:first-child') as HTMLElement | null;
-          const backBtnRowRect = backBtnRow?.getBoundingClientRect();
+        await Promise.all(Array.from(msBatchWrap.querySelectorAll('img')).map(img =>
+          img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+        ));
+        await new Promise(r => setTimeout(r, 300));
 
-          document.body.removeChild(msWrap);
+        const msBatchStartPage = pdf.getNumberOfPages() + 1;
+        const msBatchRect = msBatchInner.getBoundingClientRect();
 
-          let msY = 0;
-          let isFirstMsPage = true;
-          while (msY < msCanvas.height) {
-            const sliceH = Math.min(sliceHeightPx, msCanvas.height - msY);
-            const sc = document.createElement('canvas');
-            sc.width = msCanvas.width; sc.height = sliceH;
-            const ctx = sc.getContext('2d')!;
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, sc.width, sc.height);
-            ctx.drawImage(msCanvas, 0, msY, msCanvas.width, sliceH, 0, 0, msCanvas.width, sliceH);
-            const sliceMmH = (sliceH / sliceHeightPx) * pdfH;
-            pdf.addPage();
-            pdf.addImage(sc.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, sliceMmH);
-
-            // Add back button link on first MS page
-            if (isFirstMsPage && backBtnRowRect && qPageByQIdx[idx]) {
-              const backBtnTopPx = (backBtnRowRect.top - msWrapInnerRect.top) * 2;
-              const backBtnBottomPx = (backBtnRowRect.bottom - msWrapInnerRect.top) * 2;
-              const backBtnYMm = (backBtnTopPx / sliceHeightPx) * pdfH;
-              const backBtnHeightMm = ((backBtnBottomPx - backBtnTopPx) / sliceHeightPx) * pdfH;
-              pdf.link(0, backBtnYMm, pdfW, backBtnHeightMm, { pageNumber: qPageByQIdx[idx] });
-              isFirstMsPage = false;
-            }
-            msY += sliceH;
-          }
+        // Calculate page for each MS card
+        for (const { idx } of interleavedMsParts) {
+          const tableEl = msBatchWrap.querySelector(`table[data-msi="${idx}"]`) as HTMLElement | null;
+          if (!tableEl) continue;
+          const tableRect = tableEl.getBoundingClientRect();
+          const cardTopPx = (tableRect.top - msBatchRect.top) * 2;
+          msPageByQIdx[idx] = msBatchStartPage + Math.floor(cardTopPx / sliceHeightPx);
         }
 
-        // Add link annotations on rendered "SHOW MARK SCHEME" buttons
+        // Render batch canvas and slice into pages
+        const msBatchCanvas = await html2canvas(msBatchInner, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+        let msYOffset = 0;
+        while (msYOffset < msBatchCanvas.height) {
+          const sliceH = Math.min(sliceHeightPx, msBatchCanvas.height - msYOffset);
+          const sc = document.createElement('canvas');
+          sc.width = msBatchCanvas.width; sc.height = sliceH;
+          const ctx = sc.getContext('2d')!;
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, sc.width, sc.height);
+          ctx.drawImage(msBatchCanvas, 0, msYOffset, msBatchCanvas.width, sliceH, 0, 0, msBatchCanvas.width, sliceH);
+          pdf.addPage();
+          pdf.addImage(sc.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, (sliceH / sliceHeightPx) * pdfH);
+          msYOffset += sliceH;
+        }
+
+        // Add back button link annotations
+        for (const { idx } of interleavedMsParts) {
+          if (!qPageByQIdx[idx]) continue;
+          const tableEl = msBatchWrap.querySelector(`table[data-msi="${idx}"]`) as HTMLElement | null;
+          if (!tableEl) continue;
+          const backBtnRow = tableEl.querySelector('tr:last-child') as HTMLElement | null;
+          if (!backBtnRow) continue;
+          const backBtnRect = backBtnRow.getBoundingClientRect();
+          const backBtnTopPx = (backBtnRect.top - msBatchRect.top) * 2;
+          const backBtnBottomPx = (backBtnRect.bottom - msBatchRect.top) * 2;
+          const pageIdx = Math.floor(backBtnTopPx / sliceHeightPx);
+          const yWithinPagePx = backBtnTopPx % sliceHeightPx;
+          const pdfPageNum = msBatchStartPage + pageIdx;
+          if (pdfPageNum > pdf.getNumberOfPages()) continue;
+          pdf.setPage(pdfPageNum);
+          pdf.link(0, (yWithinPagePx / sliceHeightPx) * pdfH, pdfW, ((backBtnBottomPx - backBtnTopPx) / sliceHeightPx) * pdfH, { pageNumber: qPageByQIdx[idx] });
+        }
+
+        document.body.removeChild(msBatchWrap);
+
+        // Add "SHOW MARK SCHEME" link annotations
         const questionsElRect2 = questionsEl.getBoundingClientRect();
         for (let i = 0; i < exportParts.length; i++) {
           const msPage = msPageByQIdx[i];
           if (!msPage) continue;
           const tableEl = questionsEl.querySelector(`table[data-qi="${i}"]`) as HTMLElement | null;
           if (!tableEl) continue;
-          // Get the last row (button row)
           const rows = Array.from(tableEl.querySelectorAll('tr')) as HTMLElement[];
           const btnRow = rows[rows.length - 1];
           if (!btnRow) continue;
           const btnRect = btnRow.getBoundingClientRect();
-          // Button position relative to questionsEl, scaled for canvas scale=2
           const btnTopPx = (btnRect.top - questionsElRect2.top) * 2;
           const btnBottomPx = (btnRect.bottom - questionsElRect2.top) * 2;
           const pageIdx = Math.floor(btnTopPx / sliceHeightPx);
           const yWithinPagePx = btnTopPx % sliceHeightPx;
-          const btnTopMm = (yWithinPagePx / sliceHeightPx) * pdfH;
-          const btnHeightMm = ((btnBottomPx - btnTopPx) / sliceHeightPx) * pdfH;
           const pdfPageNum = 2 + pageIdx;
           if (pdfPageNum > pdf.getNumberOfPages()) continue;
           pdf.setPage(pdfPageNum);
-          pdf.link(0, btnTopMm, pdfW, btnHeightMm, { pageNumber: msPage });
+          pdf.link(0, (yWithinPagePx / sliceHeightPx) * pdfH, pdfW, ((btnBottomPx - btnTopPx) / sliceHeightPx) * pdfH, { pageNumber: msPage });
         }
       }
 
