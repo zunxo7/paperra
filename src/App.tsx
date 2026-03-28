@@ -1530,13 +1530,35 @@ export default function App() {
         msByQuestion.set(key, images);
       }
 
+      // Derive the expected QP paperId from this MS filename (e.g. "0478_w25_ms_11.pdf" -> "0478_w25_qp_11.pdf")
+      const expectedQpId = fileName.replace(/_ms_/i, '_qp_').replace(/\.pdf$/i, '').toLowerCase();
+
+      // Pre-compute whether any sub-part segments were detected for each question number
+      const numbersWithSubParts = new Set<number>();
+      for (const key of msByQuestion.keys()) {
+        if (key.includes('(')) {
+          const num = parseInt(key);
+          if (!isNaN(num)) numbersWithSubParts.add(num);
+        }
+      }
+
       setQuestions(prev => prev.map(q => {
-        // Try precise subpart label first, otherwise use the whole question fallback
+        // Only assign MS images to questions from the matching QP paper
+        if (!q.paperId || q.paperId.replace(/_qp_/i, '_qp_').replace(/\.pdf$/i, '').toLowerCase() !== expectedQpId) return q;
+
         let msImages = undefined;
         if (q.label && msByQuestion.has(q.label)) {
-           msImages = msByQuestion.get(q.label);
+          // Exact sub-part match
+          msImages = msByQuestion.get(q.label);
+        } else if (!q.label) {
+          // Top-level question with no label — use parent fallback
+          msImages = msByQuestion.get(q.number.toString());
         } else {
-           msImages = msByQuestion.get(q.number.toString());
+          // Has a label but wasn't found — only fall back to parent if NO sub-parts were detected
+          // for this question (avoids showing unrelated sub-parts like showing 1(a)-1(f) for 1(g))
+          if (!numbersWithSubParts.has(q.number)) {
+            msImages = msByQuestion.get(q.number.toString());
+          }
         }
 
         if (msImages?.length) {
