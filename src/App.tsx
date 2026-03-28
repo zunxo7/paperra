@@ -294,6 +294,7 @@ export default function App() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [alertCanUpgrade, setAlertCanUpgrade] = useState(false);
   const [alertType, setAlertType] = useState<'error' | 'info' | 'export'>('error');
+  const [exportMode, setExportMode] = useState<'interleaved' | 'ms-at-end'>('interleaved');
   const [loadingRequests, setLoadingRequests] = useState(false);
 
   const user = authState;
@@ -2106,41 +2107,65 @@ export default function App() {
 
       const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
 
-      const questionsHtml = selectedQuestions.map(q => {
+      const exportParts = (await Promise.all(selectedQuestions.map(async q => {
         const qImages = getQuestionImages(q);
         const msImages = getMarkSchemeImages(q);
         const label = q.label ? 'Q' + q.label : 'Q' + q.number;
-        const showTopicBadge = false;
-        const topicBadgeHtml = '';
-        const qImagesHtml = q.parts && q.parts.length > 1
-          ? q.parts.map(part =>
-              `<div style="margin-bottom:10px;">${
-                part.topicId ? `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:9px;font-weight:700;font-family:monospace;letter-spacing:1px;padding:3px 8px;margin-bottom:6px;">${esc(part.topicId)}</span>` : ''
-              }${
-                (part.questionImages || []).map(src => `<img src="${src}" style="width:100%;display:block;margin-bottom:4px;" loading="eager" />`).join('')
-              }</div>`
-            ).join('')
-          : qImages.length
-            ? qImages.map(src => `<img src="${src}" style="width:100%;display:block;margin-bottom:6px;" loading="eager" />`).join('')
-            : '<p style="color:#9ca3af;font-size:11px;font-style:italic;">No image available</p>';
-        const msSection = msImages.length
-          ? `<div style="border-top:2px solid #2563eb;background:#eff6ff;"><div style="padding:10px 20px 6px;font-size:8px;font-weight:700;letter-spacing:2.5px;color:#2563eb;font-family:monospace;">&#10003; MARK SCHEME</div><div style="padding:0 20px 16px;">${msImages.map(src => `<img src="${src}" style="width:100%;display:block;margin-bottom:6px;" loading="eager" />`).join('')}</div></div>`
+
+        const singleImg = (src: string) =>
+          `<img src="${src}" style="width:100%;display:block;" loading="eager" />`;
+        const makeBadge = (tid: string) => {
+          const title = topics.find(t => t.unitId === tid)?.title;
+          return `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:8px;font-weight:700;font-family:monospace;letter-spacing:1.5px;padding:3px 10px;margin-bottom:6px;">${esc(tid)}${title ? ' · ' + esc(title) : ''}</span>`;
+        };
+
+        // Build per-part image blocks with individual topic badges
+        const hasParts = q.parts && q.parts.length > 1;
+        let qImagesHtml: string;
+        if (hasParts) {
+          qImagesHtml = (await Promise.all(q.parts!.map(async part => {
+            const partImgs = part.questionImages || [];
+            const stitched = partImgs.length > 1 ? await stitchDataUrlImages(partImgs) : partImgs[0];
+            const badge = part.topicId && !/^\d{4}$/.test(part.topicId) ? makeBadge(part.topicId) : '';
+            return `<div style="margin-bottom:4px;">${badge}${stitched ? singleImg(stitched) : ''}</div>`;
+          }))).join('');
+        } else {
+          const stitchedQ = qImages.length > 1 ? await stitchDataUrlImages(qImages) : qImages[0];
+          const topicId = q.topicId && !/^\d{4}$/.test(q.topicId) ? q.topicId : null;
+          qImagesHtml = (topicId ? makeBadge(topicId) : '') + (stitchedQ ? singleImg(stitchedQ) : '<p style="color:#9ca3af;font-size:11px;font-style:italic;">No image available</p>');
+        }
+
+        const stitchedMs = msImages.length > 1 ? await stitchDataUrlImages(msImages) : msImages[0];
+        const msSection = stitchedMs
+          ? `<div style="border-top:2px solid #2563eb;background:#eff6ff;"><div style="padding:10px 20px 6px;font-size:8px;font-weight:700;letter-spacing:2.5px;color:#2563eb;font-family:monospace;">&#10003; MARK SCHEME</div><div style="padding:0 20px 16px;">${singleImg(stitchedMs)}</div></div>`
           : '';
-        return `<div style="position:relative;border:2px solid #141414;margin-bottom:28px;break-inside:avoid;page-break-inside:avoid;">
-          ${topicBadgeHtml}
-          <div style="padding:${showTopicBadge ? '38px' : '16px'} 20px 0;">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        return {
+          qHtml: `<table data-qi="${selectedQuestions.indexOf(q)}" style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
+          <tr><td style="padding:16px 20px 10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
               <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
               <span style="font-size:9px;font-weight:700;font-family:monospace;background:#f3f4f6;padding:5px 10px;">${esc(q.paperId || '')}</span>
             </div>
-          </div>
-          <div style="border-top:1px solid #e5e7eb;padding:14px 20px 4px;">
+          </td></tr>
+          <tr><td style="border-top:1px solid #e5e7eb;padding:14px 20px 4px;">
             <div style="font-size:8px;font-weight:700;letter-spacing:2.5px;color:#141414;opacity:0.4;margin-bottom:10px;font-family:monospace;">&#9654; QUESTION</div>
             ${qImagesHtml}
-          </div>
-          ${msSection}
-        </div>`;
-      }).join('');
+          </td></tr>
+          ${exportMode === 'interleaved' && msSection ? `<tr><td style="padding:0;">${msSection}</td></tr>` : ''}
+        </table>`,
+          msHtml: exportMode === 'ms-at-end' && msSection ? `<table style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
+          <tr><td style="padding:16px 20px 10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
+              <span style="font-size:9px;font-weight:700;font-family:monospace;background:#f3f4f6;padding:5px 10px;">${esc(q.paperId || '')}</span>
+            </div>
+          </td></tr>
+          <tr><td style="padding:0;">${msSection}</td></tr>
+        </table>` : null
+        };
+      })));
+      const questionsHtml = exportParts.map(p => p.qHtml).join('');
+      const msAtEndHtml = exportMode === 'ms-at-end' ? exportParts.filter(p => p.msHtml).map(p => p.msHtml!).join('') : '';
 
       const coverDiv = `<div style="width:794px;min-height:1123px;padding:68px 76px;display:flex;flex-direction:column;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:52px;">
@@ -2187,10 +2212,15 @@ export default function App() {
 ${questionsHtml}
 </div>`;
 
+      const msAtEndDiv = msAtEndHtml ? `<div style="padding:53px 68px;width:794px;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">
+<div style="margin-bottom:28px;border-bottom:3px solid #141414;padding-bottom:16px;"><span style="font-size:22px;font-weight:900;letter-spacing:3px;font-family:monospace;text-transform:uppercase;">Mark Schemes</span></div>
+${msAtEndHtml}
+</div>` : '';
+
       // Inject content divs only — never inject a full HTML document into the live DOM
       const container = document.createElement('div');
       container.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;background:#fff;pointer-events:none;';
-      container.innerHTML = coverDiv + questionsDiv;
+      container.innerHTML = coverDiv + questionsDiv + msAtEndDiv;
       document.body.appendChild(container);
 
       setAlertMessage('Rendering PDF... please wait.');
@@ -2211,9 +2241,10 @@ ${questionsHtml}
       const pdfW = 210;
       const pdfH = 297;
 
-      // Render cover page — use children[0]/[1] since divs have no class names
+      // Render cover page — use children[0]/[1]/[2] since divs have no class names
       const coverEl = container.children[0] as HTMLElement;
       const questionsEl = container.children[1] as HTMLElement;
+      const msAtEndEl = container.children[2] as HTMLElement | undefined;
 
       const coverCanvas = await html2canvas(coverEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
       const coverImg = coverCanvas.toDataURL('image/jpeg', 0.95);
@@ -2239,6 +2270,51 @@ ${questionsHtml}
         pdf.addPage();
         pdf.addImage(sliceImg, 'JPEG', 0, 0, pdfW, sliceMmH);
         yOffset += sliceH;
+      }
+
+      // Render MS-at-end section if present
+      if (msAtEndEl) {
+        const msCanvas = await html2canvas(msAtEndEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+        let msYOffset = 0;
+        while (msYOffset < msCanvas.height) {
+          const sliceH = Math.min(sliceHeightPx, msCanvas.height - msYOffset);
+          const sliceCanvas = document.createElement('canvas');
+          sliceCanvas.width = msCanvas.width;
+          sliceCanvas.height = sliceH;
+          const ctx = sliceCanvas.getContext('2d')!;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+          ctx.drawImage(msCanvas, 0, msYOffset, msCanvas.width, sliceH, 0, 0, msCanvas.width, sliceH);
+          const sliceMmH = (sliceH / sliceHeightPx) * pdfH;
+          pdf.addPage();
+          pdf.addImage(sliceCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, sliceMmH);
+          msYOffset += sliceH;
+        }
+      }
+
+      // Add invisible (Ctrl+F searchable) text layer — one entry per part badge span
+      const questionsElRect = questionsEl.getBoundingClientRect();
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8);
+      pdf.setTextColor(37, 99, 235);
+      const xMm = 68 * (pdfW / A4_W_PX);
+      // Query every badge span rendered inside question content cells
+      const badgeSpans = Array.from(questionsEl.querySelectorAll('td span[style*="2563eb"]')) as HTMLElement[];
+      for (const span of badgeSpans) {
+        const badgeText = span.textContent?.trim();
+        if (!badgeText) continue;
+        const rect = span.getBoundingClientRect();
+        const relTopPx = rect.top - questionsElRect.top;
+        const scaledTopPx = relTopPx * 2;
+        const pageIdx = Math.floor(scaledTopPx / sliceHeightPx);
+        const yWithinPagePx = scaledTopPx % sliceHeightPx;
+        const yMm = (yWithinPagePx / sliceHeightPx) * pdfH + 3;
+        const pdfPageNum = 2 + pageIdx;
+        if (pdfPageNum > pdf.getNumberOfPages()) continue;
+        pdf.setPage(pdfPageNum);
+        (pdf as any).internal.write('3 Tr');
+        pdf.text(badgeText, xMm, yMm);
+        (pdf as any).internal.write('0 Tr');
       }
 
       document.body.removeChild(container);
@@ -2327,13 +2403,13 @@ ${questionsHtml}
             topicId: mappedTopic ?? q.topicId,
             questionImages: [...(q.questionImages || [])],
             markingSchemeImages: q.markingSchemeImages ? [...q.markingSchemeImages] : undefined,
-            parts: isAutoMapped ? [{
+            parts: [{
               label: q.label,
               topicId: mappedTopic,
               questionImages: q.questionImages ? [...q.questionImages] : undefined,
               markingSchemeImages: q.markingSchemeImages ? [...q.markingSchemeImages] : undefined,
               text: q.text
-            }] : undefined
+            }]
           });
         } else {
           const existing = grouped.get(key)!;
@@ -2346,7 +2422,7 @@ ${questionsHtml}
             });
           }
           existing.marks = Math.max(existing.marks, q.marks);
-          if (isAutoMapped && existing.parts) {
+          if (existing.parts) {
             existing.parts.push({
               label: q.label,
               topicId: mappedTopic,
@@ -3028,6 +3104,20 @@ ${questionsHtml}
                     </div>
                     
                     <div className="flex flex-col gap-2">
+                      <div className="flex border border-[#141414] overflow-hidden">
+                        <button
+                          onClick={() => setExportMode('interleaved')}
+                          className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-all ${exportMode === 'interleaved' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50'}`}
+                        >
+                          MS after each Q
+                        </button>
+                        <button
+                          onClick={() => setExportMode('ms-at-end')}
+                          className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider border-l border-[#141414] transition-all ${exportMode === 'ms-at-end' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50'}`}
+                        >
+                          MS at end
+                        </button>
+                      </div>
                       <button
                         onClick={handleExport}
                         disabled={filteredQuestions.length === 0}
@@ -3161,25 +3251,27 @@ ${questionsHtml}
                         >
                           Show Question
                         </summary>
-                        <div className="mt-3 space-y-4">
+                        <div className="mt-3">
                           {q.parts && q.parts.length > 1 ? (
-                            q.parts.map((part, partIdx) => (
-                              <div key={`${q.id}-part-${partIdx}`} className="space-y-2">
-                                {part.topicId && (
-                                  <span className="text-[10px] font-bold font-mono bg-[#2563eb] text-white px-2 py-0.5 inline-block mb-1">{part.topicId}</span>
-                                )}
-                                {part.questionImages?.map((img, idx) => (
-                                  <img
-                                    key={`${q.id}-part-${partIdx}-${idx}`}
-                                    src={img}
-                                    alt={`Question ${q.number}`}
-                                    className="w-[60%] lg:w-[70%] border border-[#141414] border-opacity-10 cursor-zoom-in block"
-                                    loading="lazy"
-                                    onClick={(e) => { e.stopPropagation(); openPreview(part.questionImages!, idx); }}
-                                  />
-                                ))}
-                              </div>
-                            ))
+                            <div>
+                              {q.parts.map((part, partIdx) => (
+                                <div key={`${q.id}-part-${partIdx}`}>
+                                  {part.topicId && (
+                                    <span className="text-[10px] font-bold font-mono bg-[#2563eb] text-white px-2 py-0.5 inline-block mb-1 mt-2">{part.topicId}</span>
+                                  )}
+                                  {part.questionImages?.map((img, idx) => (
+                                    <img
+                                      key={`${q.id}-part-${partIdx}-${idx}`}
+                                      src={img}
+                                      alt={`Question ${q.number}`}
+                                      className="w-[60%] lg:w-[70%] cursor-zoom-in block"
+                                      loading="lazy"
+                                      onClick={(e) => { e.stopPropagation(); openPreview(part.questionImages!, idx); }}
+                                    />
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
                           ) : (
                             q.questionImages.map((img, idx) => (
                               <img
