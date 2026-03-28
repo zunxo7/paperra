@@ -2115,7 +2115,7 @@ export default function App() {
           `<img src="${src}" style="width:100%;display:block;" loading="eager" />`;
         const makeBadge = (tid: string) => {
           const title = topics.find(t => t.unitId === tid)?.title;
-          return `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:8px;font-weight:700;font-family:monospace;letter-spacing:1.5px;padding:3px 10px;margin-bottom:6px;">${esc(tid)}${title ? ' · ' + esc(title) : ''}</span>`;
+          return `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:9px;font-weight:700;font-family:monospace;letter-spacing:0.5px;padding:4px 12px;margin-bottom:6px;line-height:1.2;word-break:break-word;max-width:100%;">${esc(tid)}${title ? ' · ' + esc(title) : ''}</span>`;
         };
 
         // Build per-part image blocks with individual topic badges
@@ -2334,11 +2334,11 @@ ${msAtEndHtml}
             pdf.addPage();
             pdf.addImage(sc.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, sliceMmH);
 
-            // Add back button on first MS page
+            // Add back button on first MS page at the top
             if (isFirstMsPage) {
               const qPage = qPageByQIdx[idx];
               if (qPage) {
-                const backBtnY = pdfH - 12; // top of button area
+                const backBtnY = 5;
                 const backBtnH = 9;
                 pdf.setFillColor(100, 100, 100);
                 pdf.rect(0, backBtnY, pdfW, backBtnH, 'F');
