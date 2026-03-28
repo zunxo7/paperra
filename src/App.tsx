@@ -294,7 +294,6 @@ export default function App() {
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
   const [alertCanUpgrade, setAlertCanUpgrade] = useState(false);
   const [alertType, setAlertType] = useState<'error' | 'info' | 'export'>('error');
-  const [exportMode, setExportMode] = useState<'interleaved' | 'ms-at-end'>('interleaved');
   const [loadingRequests, setLoadingRequests] = useState(false);
 
   const user = authState;
@@ -2139,6 +2138,15 @@ export default function App() {
         const msSection = stitchedMs
           ? `<div style="border-top:2px solid #2563eb;background:#eff6ff;"><div style="padding:10px 20px 6px;font-size:8px;font-weight:700;letter-spacing:2.5px;color:#2563eb;font-family:monospace;">&#10003; MARK SCHEME</div><div style="padding:0 20px 16px;">${singleImg(stitchedMs)}</div></div>`
           : '';
+        const msTableHtml = msSection ? `<table style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
+          <tr><td style="padding:16px 20px 10px;">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+              <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
+              <span style="font-size:9px;font-weight:700;font-family:monospace;background:#f3f4f6;padding:5px 10px;">${esc(q.paperId || '')}</span>
+            </div>
+          </td></tr>
+          <tr><td style="padding:0;">${msSection}</td></tr>
+        </table>` : null;
         return {
           qHtml: `<table data-qi="${selectedQuestions.indexOf(q)}" style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
           <tr><td style="padding:16px 20px 10px;">
@@ -2151,21 +2159,13 @@ export default function App() {
             <div style="font-size:8px;font-weight:700;letter-spacing:2.5px;color:#141414;opacity:0.4;margin-bottom:10px;font-family:monospace;">&#9654; QUESTION</div>
             ${qImagesHtml}
           </td></tr>
-          ${exportMode === 'interleaved' && msSection ? `<tr><td style="padding:0;">${msSection}</td></tr>` : ''}
         </table>`,
-          msHtml: exportMode === 'ms-at-end' && msSection ? `<table style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
-          <tr><td style="padding:16px 20px 10px;">
-            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-              <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
-              <span style="font-size:9px;font-weight:700;font-family:monospace;background:#f3f4f6;padding:5px 10px;">${esc(q.paperId || '')}</span>
-            </div>
-          </td></tr>
-          <tr><td style="padding:0;">${msSection}</td></tr>
-        </table>` : null
+          msHtml: msTableHtml
         };
       })));
       const questionsHtml = exportParts.map(p => p.qHtml).join('');
-      const msAtEndHtml = exportMode === 'ms-at-end' ? exportParts.filter(p => p.msHtml).map(p => p.msHtml!).join('') : '';
+      const msAtEndHtml = '';
+      const interleavedMsParts = exportParts.map((p, i) => ({ idx: i, msHtml: p.msHtml })).filter(p => p.msHtml);
 
       const coverDiv = `<div style="width:794px;min-height:1123px;padding:68px 76px;display:flex;flex-direction:column;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:52px;">
@@ -2289,6 +2289,97 @@ ${msAtEndHtml}
           pdf.addPage();
           pdf.addImage(sliceCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, sliceMmH);
           msYOffset += sliceH;
+        }
+      }
+
+      // Render per-question MS pages, then add "SHOW MARK SCHEME" button overlays
+      if (interleavedMsParts.length > 0) {
+        // Map from question index → first PDF page of its MS
+        const msPageByQIdx: Record<number, number> = {};
+        // Map from question index → first PDF page of question in questions section
+        const qPageByQIdx: Record<number, number> = {};
+        // Calculate which PDF page each question is on
+        const questionsElRect3 = questionsEl.getBoundingClientRect();
+        for (let i = 0; i < exportParts.length; i++) {
+          const tableEl = questionsEl.querySelector(`table[data-qi="${i}"]`) as HTMLElement | null;
+          if (!tableEl) continue;
+          const tableRect = tableEl.getBoundingClientRect();
+          const cardTopPx = (tableRect.top - questionsElRect3.top) * 2;
+          const pageIdx = Math.floor(cardTopPx / sliceHeightPx);
+          qPageByQIdx[i] = 2 + pageIdx; // +2: cover is page 1, questions start at page 2
+        }
+
+        for (const { idx, msHtml } of interleavedMsParts) {
+          const msWrap = document.createElement('div');
+          msWrap.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;background:#fff;pointer-events:none;';
+          msWrap.innerHTML = `<div style="padding:53px 68px;width:794px;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">${msHtml}</div>`;
+          document.body.appendChild(msWrap);
+          await Promise.all(Array.from(msWrap.querySelectorAll('img')).map(img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })));
+          await new Promise(r => setTimeout(r, 80));
+
+          msPageByQIdx[idx] = pdf.getNumberOfPages() + 1;
+          const msCanvas = await html2canvas(msWrap.children[0] as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+          document.body.removeChild(msWrap);
+
+          let msY = 0;
+          let isFirstMsPage = true;
+          while (msY < msCanvas.height) {
+            const sliceH = Math.min(sliceHeightPx, msCanvas.height - msY);
+            const sc = document.createElement('canvas');
+            sc.width = msCanvas.width; sc.height = sliceH;
+            const ctx = sc.getContext('2d')!;
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, sc.width, sc.height);
+            ctx.drawImage(msCanvas, 0, msY, msCanvas.width, sliceH, 0, 0, msCanvas.width, sliceH);
+            const sliceMmH = (sliceH / sliceHeightPx) * pdfH;
+            pdf.addPage();
+            pdf.addImage(sc.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, sliceMmH);
+
+            // Add back button on first MS page
+            if (isFirstMsPage) {
+              const qPage = qPageByQIdx[idx];
+              if (qPage) {
+                const backBtnY = pdfH - 12; // top of button area
+                const backBtnH = 9;
+                pdf.setFillColor(100, 100, 100);
+                pdf.rect(0, backBtnY, pdfW, backBtnH, 'F');
+                pdf.setFont('helvetica', 'bold');
+                pdf.setFontSize(7);
+                pdf.setTextColor(255, 255, 255);
+                pdf.text('BACK TO QUESTION', pdfW / 2, backBtnY + 5.8, { align: 'center' });
+                pdf.link(0, backBtnY, pdfW, backBtnH, { pageNumber: qPage });
+              }
+              isFirstMsPage = false;
+            }
+            msY += sliceH;
+          }
+        }
+
+        // Add "SHOW MARK SCHEME" button overlay on each question card
+        const questionsElRect2 = questionsEl.getBoundingClientRect();
+        const btnH = 9; // mm height of button
+        for (let i = 0; i < exportParts.length; i++) {
+          const msPage = msPageByQIdx[i];
+          if (!msPage) continue;
+          const tableEl = questionsEl.querySelector(`table[data-qi="${i}"]`) as HTMLElement | null;
+          if (!tableEl) continue;
+          const tableRect = tableEl.getBoundingClientRect();
+          // Bottom of the card in questionsEl-relative px, scaled for canvas scale=2
+          const cardBottomPx = (tableRect.bottom - questionsElRect2.top) * 2;
+          const pageIdx = Math.floor(cardBottomPx / sliceHeightPx);
+          const yWithinPagePx = cardBottomPx % sliceHeightPx;
+          const cardBottomMm = (yWithinPagePx / sliceHeightPx) * pdfH;
+          const pdfPageNum = 2 + pageIdx;
+          if (pdfPageNum > pdf.getNumberOfPages()) continue;
+          pdf.setPage(pdfPageNum);
+          // Draw blue button bar
+          const btnY = cardBottomMm - btnH;
+          pdf.setFillColor(37, 99, 235);
+          pdf.rect(0, Math.max(0, btnY), pdfW, btnH, 'F');
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(7);
+          pdf.setTextColor(255, 255, 255);
+          pdf.text('SHOW MARK SCHEME', pdfW / 2, Math.max(0, btnY) + 5.8, { align: 'center' });
+          pdf.link(0, Math.max(0, btnY), pdfW, btnH, { pageNumber: msPage });
         }
       }
 
@@ -3104,20 +3195,6 @@ ${msAtEndHtml}
                     </div>
                     
                     <div className="flex flex-col gap-2">
-                      <div className="flex border border-[#141414] overflow-hidden">
-                        <button
-                          onClick={() => setExportMode('interleaved')}
-                          className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider transition-all ${exportMode === 'interleaved' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50'}`}
-                        >
-                          MS after each Q
-                        </button>
-                        <button
-                          onClick={() => setExportMode('ms-at-end')}
-                          className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider border-l border-[#141414] transition-all ${exportMode === 'ms-at-end' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50'}`}
-                        >
-                          MS at end
-                        </button>
-                      </div>
                       <button
                         onClick={handleExport}
                         disabled={filteredQuestions.length === 0}
