@@ -2139,6 +2139,7 @@ export default function App() {
           ? `<div style="border-top:2px solid #2563eb;background:#eff6ff;"><div style="padding:10px 20px 6px;font-size:8px;font-weight:700;letter-spacing:2.5px;color:#2563eb;font-family:monospace;">&#10003; MARK SCHEME</div><div style="padding:0 20px 16px;">${singleImg(stitchedMs)}</div></div>`
           : '';
         const msTableHtml = msSection ? `<table style="width:100%;border:2px solid #141414;margin-bottom:28px;border-collapse:collapse;break-inside:avoid;page-break-inside:avoid;">
+          <tr><td style="padding:0;"><div style="background:#666666;color:#fff;padding:12px 20px;text-align:center;font-size:10px;font-weight:700;letter-spacing:2px;font-family:helvetica,sans-serif;cursor:pointer;">BACK TO QUESTION</div></td></tr>
           <tr><td style="padding:16px 20px 10px;">
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
               <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
@@ -2320,6 +2321,13 @@ ${msAtEndHtml}
 
           msPageByQIdx[idx] = pdf.getNumberOfPages() + 1;
           const msCanvas = await html2canvas(msWrap.children[0] as HTMLElement, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+
+          // Track back button position for link annotation
+          const msWrapInner = msWrap.children[0] as HTMLElement;
+          const msWrapInnerRect = msWrapInner.getBoundingClientRect();
+          const backBtnRow = msWrap.querySelector('table tr:first-child') as HTMLElement | null;
+          const backBtnRowRect = backBtnRow?.getBoundingClientRect();
+
           document.body.removeChild(msWrap);
 
           let msY = 0;
@@ -2335,20 +2343,13 @@ ${msAtEndHtml}
             pdf.addPage();
             pdf.addImage(sc.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, pdfW, sliceMmH);
 
-            // Add back button on first MS page at the top
-            if (isFirstMsPage) {
-              const qPage = qPageByQIdx[idx];
-              if (qPage) {
-                const backBtnY = 5;
-                const backBtnH = 9;
-                pdf.setFillColor(100, 100, 100);
-                pdf.rect(0, backBtnY, pdfW, backBtnH, 'F');
-                pdf.setFont('helvetica', 'bold');
-                pdf.setFontSize(7);
-                pdf.setTextColor(255, 255, 255);
-                pdf.text('BACK TO QUESTION', pdfW / 2, backBtnY + 5.8, { align: 'center' });
-                pdf.link(0, backBtnY, pdfW, backBtnH, { pageNumber: qPage });
-              }
+            // Add back button link on first MS page
+            if (isFirstMsPage && backBtnRowRect && qPageByQIdx[idx]) {
+              const backBtnTopPx = (backBtnRowRect.top - msWrapInnerRect.top) * 2;
+              const backBtnBottomPx = (backBtnRowRect.bottom - msWrapInnerRect.top) * 2;
+              const backBtnYMm = (backBtnTopPx / sliceHeightPx) * pdfH;
+              const backBtnHeightMm = ((backBtnBottomPx - backBtnTopPx) / sliceHeightPx) * pdfH;
+              pdf.link(0, backBtnYMm, pdfW, backBtnHeightMm, { pageNumber: qPageByQIdx[idx] });
               isFirstMsPage = false;
             }
             msY += sliceH;
