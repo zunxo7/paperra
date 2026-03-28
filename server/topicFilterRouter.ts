@@ -200,9 +200,11 @@ topicFilterRouter.post('/filter-questions', async (req, res) => {
     const resultMapping: Record<string, string> = {};
     const questionsByPaper: Record<string, any[]> = {};
     for (const q of questions) {
-      const lastUnderscore = q.id.lastIndexOf('_');
-      if (lastUnderscore === -1) continue;
-      const paperId = q.id.substring(0, lastUnderscore).toLowerCase();
+      // Extract paperId as everything before the first "-q" segment (e.g. "0478_m25_qp_12.pdf")
+      // Using lastIndexOf('_') was wrong — it stripped the variant suffix, merging _12 and _22 into one row
+      const dashQ = q.id.indexOf('-q');
+      if (dashQ === -1) continue;
+      const paperId = q.id.substring(0, dashQ).toLowerCase();
       if (!questionsByPaper[paperId]) questionsByPaper[paperId] = [];
       questionsByPaper[paperId].push(q);
     }
