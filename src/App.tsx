@@ -2112,12 +2112,27 @@ export default function App() {
         // Construct label: if parts exist, show list (e.g. "Q1 a), b), c), d), e), f)"), else just "Q1" or "Q1(a)"
         let label = 'Q' + q.number;
         if (q.parts && q.parts.length > 1) {
-          const partLabels = q.parts.map(p => {
+          // Extract all parenthesised segments from label, e.g. "3(b)(i)" → ["b","i"]
+          const partExtracted = q.parts.map(p => {
             const pLabel = p.label || '';
-            // Extract just the letter from "1(a)" → "a"
-            const match = pLabel.match(/\(([^)]+)\)/);
-            return match ? match[1] + ')' : pLabel + ')';
-          }).filter(l => l !== ')').join(' ');
+            const matches = Array.from(pLabel.matchAll(/\(([^)]+)\)/g)).map(m => m[1]);
+            if (matches.length >= 2) return matches[0] + ') ' + matches[1]; // "(b)(i)" → "b) i"
+            if (matches.length === 1) return matches[0];
+            return '';
+          }).filter(l => l !== '');
+
+          // Remove standalone letters that have nested versions following them
+          const final: string[] = [];
+          for (let i = 0; i < partExtracted.length; i++) {
+            const current = partExtracted[i];
+            if (/^[a-z]$/.test(current)) {
+              const hasNested = partExtracted.some((item, idx) => idx > i && item.startsWith(current + ') '));
+              if (hasNested) continue;
+            }
+            final.push(current);
+          }
+
+          const partLabels = final.map(p => p.endsWith(')') ? p : p + ')').join(', ');
           label = `Q${q.number} ${partLabels}`;
         } else if (q.label) {
           label = 'Q' + q.label;
