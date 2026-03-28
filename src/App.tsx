@@ -2109,11 +2109,11 @@ export default function App() {
       const exportParts = (await Promise.all(selectedQuestions.map(async q => {
         const qImages = getQuestionImages(q);
         const msImages = getMarkSchemeImages(q);
-        // Construct label: if parts exist, show list (e.g. "Q1(a, b, c, d, e, f, g)"), else just "Q1" or "Q1(a)"
+        // Construct label: if parts exist, show list (e.g. "Q1 a), b), c), d), e), f)"), else just "Q1" or "Q1(a)"
         let label = 'Q' + q.number;
         if (q.parts && q.parts.length > 1) {
-          const partLabels = q.parts.map(p => p.label || '').filter(Boolean).join(', ');
-          label = `Q${q.number}(${partLabels})`;
+          const partLabels = q.parts.map(p => (p.label || '') + ')').filter(l => l !== ')').join(' ');
+          label = `Q${q.number} ${partLabels}`;
         } else if (q.label) {
           label = 'Q' + q.label;
         }
