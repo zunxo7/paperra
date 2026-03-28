@@ -2112,7 +2112,12 @@ export default function App() {
         // Construct label: if parts exist, show list (e.g. "Q1 a), b), c), d), e), f)"), else just "Q1" or "Q1(a)"
         let label = 'Q' + q.number;
         if (q.parts && q.parts.length > 1) {
-          const partLabels = q.parts.map(p => (p.label || '') + ')').filter(l => l !== ')').join(' ');
+          const partLabels = q.parts.map(p => {
+            const pLabel = p.label || '';
+            // Extract just the letter from "1(a)" → "a"
+            const match = pLabel.match(/\(([^)]+)\)/);
+            return match ? match[1] + ')' : pLabel + ')';
+          }).filter(l => l !== ')').join(' ');
           label = `Q${q.number} ${partLabels}`;
         } else if (q.label) {
           label = 'Q' + q.label;
