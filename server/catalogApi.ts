@@ -17,7 +17,8 @@ router.get("/refreshed-syllabi", async (req, res) => {
   if (!qual) {
     return res.status(400).json({ error: "qualificationLevel is required." });
   }
-  if (!QUAL_SET.has(qual as QualificationLevel)) {
+  const qClean = qual.toLowerCase() as QualificationLevel;
+  if (!QUAL_SET.has(qClean)) {
     return res.status(400).json({ error: "Invalid qualificationLevel." });
   }
 
@@ -28,8 +29,8 @@ router.get("/refreshed-syllabi", async (req, res) => {
 
   try {
     const r = await db.execute({
-      sql: "SELECT syllabus_code FROM syllabus_catalog_refresh WHERE qualification_level = ? ORDER BY syllabus_code",
-      args: [qual],
+      sql: "SELECT syllabus_code FROM syllabus_data WHERE qualification_level = ? ORDER BY syllabus_code",
+      args: [qual.toLowerCase()],
     });
     const codes: string[] = [];
     for (const row of r.rows) {
@@ -62,7 +63,8 @@ router.get("/qp-variants", async (req, res) => {
   if (!qual || !code) {
     return res.status(400).json({ error: "qualificationLevel and syllabusCode are required." });
   }
-  if (!QUAL_SET.has(qual as QualificationLevel)) {
+  const qClean = qual.toLowerCase() as QualificationLevel;
+  if (!QUAL_SET.has(qClean)) {
     return res.status(400).json({ error: "Invalid qualificationLevel." });
   }
 
@@ -84,40 +86,99 @@ router.get("/qp-variants", async (req, res) => {
   }
 
   try {
-    const chk = await db.execute({
-      sql: "SELECT 1 AS ok FROM paper_link_check WHERE qualification_level = ? AND syllabus_code = ? LIMIT 1",
-      args: [qual, code],
-    });
-    const hasAnyRow = (chk.rows?.length ?? 0) > 0;
-    if (!hasAnyRow) {
-      return res.json({ hasCatalogData: false, variants: null });
-    }
-
-    const inPlaceholders = sessionsForQuery.map(() => "?").join(", ");
-    const yearSpan = yearHi - yearLo + 1;
-    /** Union across sessions; still require every calendar year in range to have ≥1 matching row. */
     const r = await db.execute({
-      sql: `SELECT variant FROM paper_link_check
-            WHERE qualification_level = ? AND syllabus_code = ? AND paper_type = 'qp' AND is_available = 1
-            AND session_code IN (${inPlaceholders})
-            AND year BETWEEN ? AND ?
-            GROUP BY variant
-            HAVING COUNT(DISTINCT year) = ?
-            ORDER BY variant`,
-      args: [qual, code, ...sessionsForQuery, yearLo, yearHi, yearSpan],
+      sql: `SELECT variants_json FROM syllabus_data
+            WHERE qualification_level = ? AND syllabus_code = ?`,
+      args: [qual.toLowerCase(), code],
     });
-    const rows = r.rows;
-    const variants: string[] = [];
-    for (const row of rows) {
-      const v = Array.isArray(row) ? row[0] : (row as Record<string, unknown>).variant;
-      if (v != null && v !== "") variants.push(String(v));
+    
+    const variantSet = new Set<string>();
+    if (r.rows.length > 0) {
+      const vStr = r.rows[0].variants_json as string;
+      if (vStr) {
+        try {
+          const fullData = JSON.parse(vStr) as Record<number, Record<string, string[]>>;
+          for (let y = yearLo; y <= yearHi; y++) {
+            const yearData = fullData[y];
+            if (!yearData) continue;
+            for (const sess of sessionsForQuery) {
+              const variants = yearData[sess];
+              if (Array.isArray(variants)) {
+                variants.forEach(v => variantSet.add(v));
+              }
+            }
+          }
+        } catch(e) {}
+      }
     }
+    const variants = Array.from(variantSet).sort();
     return res.json({ hasCatalogData: true, variants });
   } catch (e) {
     console.error("[CATALOG_QP_VARIANTS]", e);
     return res.status(500).json({
       error: e instanceof Error ? e.message : "Query failed.",
     });
+  }
+});
+
+router.get("/valid-papers", async (req, res) => {
+  const qual = typeof req.query.qualificationLevel === "string" ? req.query.qualificationLevel.trim() : "";
+  const code = typeof req.query.syllabusCode === "string" ? req.query.syllabusCode.trim() : "";
+  if (!qual || !code) return res.status(400).json({ error: "Missing params" });
+  
+  const rawSessions = typeof req.query.sessions === "string" ? req.query.sessions.trim() : "";
+  const rawVariants = typeof req.query.variants === "string" ? req.query.variants.trim() : "";
+  
+  const sessionList = rawSessions.split(",").filter((s) => SESSION_LETTERS.has(s.toUpperCase()));
+  const variantList = rawVariants.split(",").filter(v => v);
+  
+  const y0 = parseYear(req.query.startYear, MIN_YEAR);
+  const y1 = parseYear(req.query.endYear, MAX_YEAR);
+  const yearLo = Math.min(y0, y1);
+  const yearHi = Math.max(y0, y1);
+
+  const qClean = qual.toLowerCase();
+  const db = getTursoClient();
+  if (!db) return res.json({ hasCatalogData: false, filenames: [] });
+
+  try {
+    const r = await db.execute({
+      sql: `SELECT variants_json FROM syllabus_data
+            WHERE qualification_level = ? AND syllabus_code = ?`,
+      args: [qClean, code],
+    });
+    
+    const filenames: string[] = [];
+    const variantSet = new Set(variantList);
+    
+    if (r.rows.length > 0) {
+       const vStr = r.rows[0].variants_json as string;
+       if (vStr) {
+         try {
+           const fullData = JSON.parse(vStr) as Record<number, Record<string, string[]>>;
+           for (let y = yearLo; y <= yearHi; y++) {
+             const yearData = fullData[y];
+             if (!yearData) continue;
+             const yy = String(y).slice(-2);
+             for (const sess of sessionList) {
+               const sKey = sess.toUpperCase();
+               const variants = yearData[sKey];
+               if (Array.isArray(variants)) {
+                 variants.forEach(va => {
+                   if (variantSet.size === 0 || variantSet.has(va)) {
+                     filenames.push(`${code}_${sKey.toLowerCase()}${yy}_qp_${va}.pdf`);
+                   }
+                 });
+               }
+             }
+           }
+         } catch(e) {}
+       }
+    }
+    return res.json({ hasCatalogData: r.rows.length > 0, filenames });
+  } catch (e) {
+    console.error("[CATALOG_VALID_PAPERS]", e);
+    return res.status(500).json({ error: "Error" });
   }
 });
 

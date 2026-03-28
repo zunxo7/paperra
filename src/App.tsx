@@ -1,18 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AdminPanel } from './components/AdminPanel';
+import AdminPanel, { UserRequest } from './components/AdminPanel';
 import { UserAuthModal } from './components/UserAuthModal';
 import * as pdfjsLib from 'pdfjs-dist';
-import { 
-  FileText, 
-  ChevronRight, 
-  BookOpen, 
-  CheckCircle2,
-  Link as LinkIcon,
-  X,
-  User,
-  LogOut
+import {
+  X, Search, ChevronRight, ChevronLeft, Menu, LogOut, CheckCircle2, History, AlertCircle, RefreshCw, Star, Info, LayoutGrid, List, Zap, Plus, Settings, Filter, Trash2, Edit2, Key, Download, Trash, User, ArrowRight, Share2, Clipboard, Globe, Send, Mail, Github, Twitter, Linkedin, ExternalLink, DownloadCloud, FileText, Check, Clock, PlusCircle, MinusCircle, HelpCircle, Save, Undo, Redo, Maximize2, Minimize2, MoreHorizontal, MoreVertical, Eye, EyeOff, Lock, LayoutDashboard, BookOpen, Bug, LogIn
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
+import { UserHistoryModal } from './components/UserHistoryModal';
+import { AlertModal } from './components/AlertModal';
+import { RequestModal } from './components/RequestModal';
+import { BugReportModal } from './components/BugReportModal';
+import { ShopModal } from './components/ShopModal';
 import { Question } from './types';
 import { inferMsUrlFromQpUrl } from './lib/pdfParser';
 import { formatMcqAnswer, parseMcqMarkSchemeFromText } from './lib/mcqMarkScheme';
@@ -43,63 +41,236 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLi
 
 const YEAR_OPTIONS = Array.from({ length: MAX_YEAR - MIN_YEAR + 1 }, (_, i) => MIN_YEAR + i);
 
+const ProfileModal = ({ isOpen, onClose, user, onLogout, onOpenHistory, onOpenAdmin, onAlert, onAlertUpgrade, onUpgrade, onOpenRequest, onOpenBugReport, onRefresh }: any) => {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && onRefresh) {
+      onRefresh();
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await onRefresh();
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[210] p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            className="bg-white border-2 border-[#141414] p-6 w-full max-w-sm relative shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute top-3 right-3 text-[#141414] hover:opacity-70 focus:outline-none transition-opacity"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h2 className="text-xl font-bold uppercase tracking-wider mb-6 border-b-2 border-[#141414] pb-2">
+              Your Profile
+            </h2>
+
+            {user ? (
+              <div className="space-y-5">
+                <div className="flex items-center gap-3">
+                  <User className="w-6 h-6 text-[#141414]" />
+                  <div>
+                    <p className="text-sm font-bold">Username:</p>
+                    <p className="text-base">{user.username}</p>
+                  </div>
+                </div>
+
+                {/* Plan display */}
+                <div className="border-2 border-[#141414] p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Current Plan</span>
+                    <span className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 ${
+                      user.isAdmin ? 'bg-[#141414] text-white ring-2 ring-yellow-400 ring-offset-1' :
+                      user.tier === 'pro' || user.tier === 'elite' ? 'bg-yellow-100 text-yellow-800' :
+                      user.tier === 'starter'   ? 'bg-blue-100 text-blue-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
+                      {user.isAdmin ? 'ULTRA' : (user.tier === 'free' ? 'Free Trial' : user.tier.charAt(0).toUpperCase() + user.tier.slice(1))}
+                    </span>
+                  </div>
+
+                  {!user.isAdmin && (
+                    <div className="space-y-2 pt-2 border-t border-[#141414]/10">
+                      {user.tier === 'free' && user.trialDaysLeft !== undefined && (
+                        <div className="flex items-center justify-between">
+                           <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Trial Ends In</span>
+                           <span className="text-xs font-bold text-blue-600">{user.trialDaysLeft} DAYS</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                         <div className="flex items-center gap-1.5">
+                           <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Daily Reset In</span>
+                           <button 
+                             onClick={handleManualRefresh}
+                             className={`p-1 hover:bg-gray-100 rounded-sm transition-all ${isRefreshing ? 'animate-spin' : ''}`}
+                             title="Refresh info"
+                           >
+                             <RefreshCw className="w-2.5 h-2.5 opacity-40" />
+                           </button>
+                         </div>
+                         <span className="text-xs font-mono font-bold">{formatTime(user.nextResetSeconds || 0)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {!user.isAdmin && user.subscription && user.tier !== 'free' && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold uppercase tracking-widest opacity-50">Renews</span>
+                      <span className="text-[11px] font-mono">
+                        {new Date(user.subscription.current_period_end * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  )}
+
+                  {!user.isAdmin && user.tier !== 'pro' && user.tier !== 'elite' && (
+                    <button
+                      onClick={onUpgrade}
+                      className="w-full mt-2 py-2.5 bg-blue-600 text-white font-bold uppercase text-[10px] tracking-widest hover:bg-[#141414] transition-colors shadow-[4px_4px_0px_rgba(37,99,235,0.2)]"
+                    >
+                      Upgrade Plan
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+
+                  <button
+                    onClick={() => {
+                      onClose(); onOpenHistory(); 
+                    }}
+                    className="flex items-center justify-center gap-2 border border-[#141414] px-4 py-2 hover:bg-gray-50 focus:outline-none transition-colors"
+                    title="View History"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">
+                      View History ({user.isAdmin ? 'UNLIMITED' : (user.tier === 'pro' || user.tier === 'elite' ? '50' : user.tier === 'starter' ? '5' : '3')})
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => { 
+                      if (user.tier === 'free') {
+                        onAlertUpgrade("Feature requests and subject additions are available on Starter and Pro plans.");
+                        return;
+                      }
+                      onClose(); onOpenRequest(); 
+                    }}
+                    className="flex items-center justify-center gap-2 border border-[#141414] px-4 py-2 hover:bg-gray-50 focus:outline-none transition-colors"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">
+                      Submit Request
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => { onClose(); onOpenBugReport(); }}
+                    className="flex items-center justify-center gap-2 border border-[#141414] px-4 py-2 hover:bg-gray-50 focus:outline-none transition-colors"
+                  >
+                    <Bug className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase tracking-wider">
+                      Report a Bug
+                    </span>
+                  </button>
+
+                  {user.isAdmin && (
+                    <button
+                      onClick={() => { onClose(); onOpenAdmin(); }}
+                      className="flex items-center justify-center gap-2 border border-[#141414] bg-gray-200 text-[#141414] px-4 py-2 hover:bg-gray-300 focus:outline-none transition-colors"
+                    >
+                      <LayoutDashboard className="w-4 h-4" />
+                      <span className="text-xs font-bold uppercase tracking-wider">Dashboard</span>
+                    </button>
+                  )}
+
+                  <div className="pt-4 mt-2 border-t border-[#141414]/10">
+                    <button
+                      onClick={() => { onClose(); onLogout(); }}
+                      className="w-full flex items-center justify-center gap-2 border border-[#141414] bg-white text-[#141414] px-4 py-2.5 hover:bg-[#141414] hover:text-white transition-all font-bold uppercase text-[10px] tracking-widest"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      LOGOUT
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-gray-600">You are not logged in.</p>
+            )}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+const WelcomeModal = ({ isOpen, onClose, tokens }: { isOpen: boolean; onClose: () => void; tokens: number }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+      <motion.div
+        initial={{ scale: 0.8, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        className="bg-white border-4 border-[#141414] p-10 shadow-[8px_8px_0px_#141414] w-full max-w-sm relative text-center"
+      >
+        <div className="flex justify-center mb-6">
+          <div className="w-20 h-20 bg-blue-600 border-4 border-[#141414] flex items-center justify-center -rotate-6 shadow-[4px_4px_0px_#141414]">
+             <Zap className="w-12 h-12 text-white" />
+          </div>
+        </div>
+        <h2 className="text-3xl font-black uppercase italic tracking-tighter mb-2 leading-none">Congrats!</h2>
+        <p className="text-sm font-bold uppercase tracking-widest opacity-60 mb-8 border-b-2 border-[#141414]/10 pb-4">
+          Welcome to Paperra
+        </p>
+        <div className="bg-[#141414] text-white p-6 mb-8 transform rotate-1">
+          <p className="text-[10px] font-bold uppercase tracking-[3px] opacity-70 mb-1">Account Credited</p>
+          <p className="text-4xl font-black font-mono">{tokens} TOKENS</p>
+        </div>
+        <button
+          onClick={onClose}
+          className="w-full bg-blue-600 border-2 border-[#141414] text-white py-4 font-black uppercase text-sm tracking-widest hover:bg-[#141414] transition-all transform hover:-translate-y-1 active:translate-y-0"
+        >
+          Let's Go!
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
 export default function App() {
-  const [adminOpen, setAdminOpen] = useState(false);
-  const [userModalOpen, setUserModalOpen] = useState(false);
-  const [user, setUser] = useState<{ username: string; token: string; filterLimit: number } | null>(null);
-
-  const [syllabusPdfUrl, setSyllabusPdfUrl] = useState('');
-  const [topics, setTopics] = useState<{ unitId: string; title: string }[]>([]);
-  const [topicsLoading, setTopicsLoading] = useState(false);
-  const [topicsError, setTopicsError] = useState('');
-  const [questionTopicMappings, setQuestionTopicMappings] = useState<Record<string, string>>({});
-  const [selectedTopicFilter, setSelectedTopicFilter] = useState<string>('');
-  const [adminToken, setAdminTokenState] = useState<string | null>(() => {
-    try {
-      return sessionStorage.getItem('paperra_admin_token');
-    } catch {
-      return null;
-    }
-  });
-  const adminIconClicks = useRef({ n: 0, t: 0 });
-
-  const setAdminToken = (token: string | null) => {
-    try {
-      if (token) sessionStorage.setItem('paperra_admin_token', token);
-      else sessionStorage.removeItem('paperra_admin_token');
-    } catch {
-      /* ignore */
-    }
-    setAdminTokenState(token);
-  };
-
-  const onPaperraIconClick = () => {
-    const now = Date.now();
-    if (now - adminIconClicks.current.t > 700) adminIconClicks.current.n = 0;
-    adminIconClicks.current.t = now;
-    adminIconClicks.current.n += 1;
-    if (adminIconClicks.current.n >= 3) {
-      adminIconClicks.current.n = 0;
-      setAdminOpen(true);
-    }
-  };
-
-  const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState('');
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [qualificationLevel, setQualificationLevel] = useState<QualificationLevel>('igcse');
-  const [selectedSyllabusCode, setSelectedSyllabusCode] = useState('');
-  const [syllabusSearch, setSyllabusSearch] = useState('');
-  const [selectedSessions, setSelectedSessions] = useState<string[]>(['W']);
-  const [startYear, setStartYear] = useState(2025);
-  const [endYear, setEndYear] = useState(2025);
-  const [selectedVariants, setSelectedVariants] = useState<string[]>([
-    ...DEFAULT_VARIANTS_BEFORE_CATALOG,
-  ]);
-  /** `undefined` = fetching; `null` = no Turso (show all subjects); `[]` = none refreshed; else codes from `syllabus_catalog_refresh` */
-  const [refreshedSyllabusCodes, setRefreshedSyllabusCodes] = useState<string[] | null | undefined>(undefined);
-  /** `undefined` = fetching; `null` = no Turso rows for syllabus (show full static list); `[]` = catalog has rows but no QP available; else only variants that worked in shared DB */
-  const [catalogQpVariants, setCatalogQpVariants] = useState<string[] | null | undefined>(undefined);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showGuestWelcome, setShowGuestWelcome] = useState(false);
   const [previewImages, setPreviewImages] = useState<string[] | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
   const [mobileCompareViewer, setMobileCompareViewer] = useState<{
@@ -109,6 +280,242 @@ export default function App() {
     markSchemeText?: string;
   } | null>(null);
   const [showMobileMarkScheme, setShowMobileMarkScheme] = useState(false);
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [userModalMode, setUserModalMode] = useState<'login' | 'signup'>('login');
+  const [userHistoryOpen, setUserHistoryOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [showBugReportModal, setShowBugReportModal] = useState(false);
+  const [showShopModal, setShowShopModal] = useState(false);
+  const [authState, setAuthState] = useState<{ username: string; token: string; tokens: number; isAdmin?: boolean; tier: string; subscription: any | null; trialDaysLeft?: number; nextResetSeconds?: number } | null>(null);
+  const [adminRequests, setAdminRequests] = useState<UserRequest[]>([]);
+  const [alertMessage, setAlertMessage] = useState<string | null>(null);
+  const [alertCanUpgrade, setAlertCanUpgrade] = useState(false);
+  const [alertType, setAlertType] = useState<'error' | 'info' | 'export'>('error');
+  const [loadingRequests, setLoadingRequests] = useState(false);
+
+  const user = authState;
+
+  useEffect(() => {
+    const anyModalOpen = 
+      showPricingModal || previewImages || mobileCompareViewer || 
+      showProfileModal || showShopModal || adminOpen || 
+      showRequestModal || userModalOpen || userHistoryOpen || 
+      showBugReportModal || showWelcomeModal;
+
+    if (anyModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [
+    showPricingModal, previewImages, mobileCompareViewer, 
+    showProfileModal, showShopModal, adminOpen, 
+    showRequestModal, userModalOpen, userHistoryOpen, 
+    showBugReportModal, showWelcomeModal
+  ]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('paperra_token');
+    if (token) {
+      setLoading(true);
+      fetch(apiUrl('user/me'), {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.username) {
+          setAuthState({
+            token,
+            username: data.username,
+            tokens: data.tokens,
+            isAdmin: !!data.isAdmin,
+            tier: data.tier || 'free',
+            subscription: data.subscription || null,
+            trialDaysLeft: data.trialDaysLeft,
+            nextResetSeconds: data.nextResetSeconds
+          });
+        } else {
+          setAuthState(null);
+          localStorage.removeItem('paperra_token');
+        }
+      })
+      .catch(() => setAuthState(null))
+      .finally(() => setLoading(false));
+    }
+  }, []);
+
+  const handleLoginSuccess = (data: { token: string; username: string; tokens: number; isAdmin?: boolean; tier: string; subscription?: any; trialDaysLeft?: number; nextResetSeconds?: number; isNewUser?: boolean }) => {
+    setAuthState({ ...data, tier: data.tier || 'free', subscription: data.subscription || null, trialDaysLeft: data.trialDaysLeft || 0, nextResetSeconds: data.nextResetSeconds || 0 });
+    localStorage.setItem('paperra_token', data.token);
+    setUserModalOpen(false);
+    if (data.isNewUser) {
+      setTimeout(() => setShowWelcomeModal(true), 600);
+    }
+  };
+
+  const refreshUserData = async () => {
+    if (!user?.token) return;
+    try {
+      const res = await fetch(apiUrl('user/me'), {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      const data = await res.json();
+      if (data.username) {
+        setAuthState(prev => prev ? {
+          ...prev,
+          tokens: data.tokens,
+          tier: data.tier,
+          subscription: data.subscription,
+          trialDaysLeft: data.trialDaysLeft,
+          nextResetSeconds: data.nextResetSeconds
+        } : null);
+      }
+    } catch (e) {
+      console.error('Refresh failed', e);
+    }
+  };
+
+  const handleLogout = () => {
+    const token = user?.token;
+    setAuthState(null);
+    localStorage.removeItem('paperra_token');
+    if (token) {
+      fetch(apiUrl('user/logout'), {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {});
+    }
+  };
+
+  useEffect(() => {
+    if (authState?.nextResetSeconds && authState.nextResetSeconds > 0) {
+      const timer = setInterval(() => {
+        setAuthState(prev => prev ? { ...prev, nextResetSeconds: Math.max(0, (prev.nextResetSeconds || 0) - 1) } : null);
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [authState?.nextResetSeconds]);
+
+  const [syllabusPdfUrl, setSyllabusPdfUrl] = useState('');
+  const [topics, setTopics] = useState<{ unitId: string; title: string }[]>([]);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [topicsStatus, setTopicsStatus] = useState('');
+  const [topicsError, setTopicsError] = useState('');
+  const [questionTopicMappings, setQuestionTopicMappings] = useState<Record<string, string>>({});
+
+  const fetchAdminRequests = async () => {
+    if (!authState?.isAdmin) return;
+    setLoadingRequests(true);
+    try {
+      const res = await fetch(apiUrl('admin/requests'), {
+        headers: { Authorization: `Bearer ${authState.token}` }
+      });
+      if (res.ok) {
+        const data = await res.json() as { ok: boolean; requests: UserRequest[] };
+        setAdminRequests(data.requests ?? []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch requests', e);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  const deleteAdminRequest = async (id: number) => {
+    if (!authState?.token) return;
+    try {
+      const res = await fetch(apiUrl(`admin/requests/${id}`), {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authState.token}` }
+      });
+      if (res.ok) fetchAdminRequests();
+    } catch (e) { console.error(e); }
+  };
+
+  const updateAdminRequestStatus = async (id: number, status: 'pending' | 'completed') => {
+    if (!authState?.token) return;
+    try {
+      const res = await fetch(apiUrl('admin/requests/update-status'), {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authState.token}` 
+        },
+        body: JSON.stringify({ id, status })
+      });
+      if (res.ok) fetchAdminRequests();
+    } catch (e) { console.error(e); }
+  };
+
+  useEffect(() => {
+    if (adminOpen) fetchAdminRequests();
+  }, [adminOpen]);
+
+
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState('');
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [qualificationLevel, setQualificationLevel] = useState<QualificationLevel>('igcse');
+  const [selectedSyllabusCode, setSelectedSyllabusCode] = useState('');
+  const [cachedTopicCount, setCachedTopicCount] = useState(0);
+
+  useEffect(() => {
+    if (!selectedSyllabusCode) {
+      setCachedTopicCount(0);
+      return;
+    }
+    fetch(apiUrl(`topics/check-cache?syllabusCode=${selectedSyllabusCode}`))
+      .then(r => r.json())
+      .then(data => {
+        if (data.cached && data.topicCount) {
+          setCachedTopicCount(data.topicCount);
+        } else {
+          setCachedTopicCount(0);
+        }
+      })
+      .catch(() => setCachedTopicCount(0));
+  }, [selectedSyllabusCode]);
+  const [syllabusSearch, setSyllabusSearch] = useState('');
+  const [selectedSessions, setSelectedSessions] = useState<string[]>(['W']);
+  const [startYear, setStartYear] = useState(2025);
+  const [endYear, setEndYear] = useState(2025);
+  const [yearRange, setYearRange] = useState('2025');
+  const [selectedVariants, setSelectedVariants] = useState<string[]>([
+    ...DEFAULT_VARIANTS_BEFORE_CATALOG,
+  ]);
+  /** `undefined` = fetching; `null` = no Turso (show all subjects); `[]` = none refreshed; else codes from `syllabus_catalog_refresh` */
+  const [refreshedSyllabusCodes, setRefreshedSyllabusCodes] = useState<string[] | null | undefined>(undefined);
+  /** `undefined` = fetching; `null` = no Turso rows for syllabus (show full static list); `[]` = catalog has rows but no QP available; else only variants that worked in shared DB */
+  const [catalogQpVariants, setCatalogQpVariants] = useState<string[] | null | undefined>(undefined);
+  const getGenerateTokenCost = (count: number) => count;
+  const [isFilteredLocally, setIsFilteredLocally] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<'source' | 'filter' | 'export'>('source');
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
+  const [showGuestFeatureLock, setShowGuestFeatureLock] = useState(false);
+  const [guestTokens, setGuestTokens] = useState<number>(3);
+
+  useEffect(() => {
+    // If we're a guest, fetch the server-side IP tokens
+    if (!authState) {
+      fetch(apiUrl('user/guest-tokens'))
+        .then(r => r.json())
+        .then(data => {
+          if (data.tokens !== undefined) {
+             setGuestTokens(data.tokens);
+             // Show welcome if it's their first time and they have 3 tokens
+             if (data.tokens === 3 && !localStorage.getItem('paperra_guest_seen')) {
+                setShowGuestWelcome(true);
+                localStorage.setItem('paperra_guest_seen', 'true');
+             }
+          }
+        })
+        .catch(e => console.error("Guest token fetch failed", e));
+    }
+  }, [authState]);
 
   type TextItemBox = {
     str: string;
@@ -130,30 +537,54 @@ export default function App() {
     footerY?: number;
     contentTopY: number;
     contentBottomY: number;
+    contentCutoffY?: number;
     /** Arabic/Hebrew-heavy layout — question numbers may be in the right margin. */
     rtlLayout: boolean;
   };
 
   const cleanPdfTextForAI = (text: string) => {
-    const footerPatterns = [
-      /©\s*UCLES[^\n\r]*/gi,
-      /\[\s*Turn\s*over[^\]]*\]/gi,
-      /\bTurn\s*over\b/gi,
-      /\bBLANK\s+PAGE\b/gi,
-      /\bPage\s+\d+\b/gi,
-      /\b\d+\s*0?4?7?8\/\d{2}\b/gi
-    ];
-
     let cleaned = text;
-    footerPatterns.forEach((pattern) => {
-      cleaned = cleaned.replace(pattern, " ");
-    });
 
-    // Remove common exam boilerplate blocks that add tokens but not value.
-    cleaned = cleaned.replace(/READ THESE INSTRUCTIONS FIRST[\s\S]{0,1400}?Do not use an erasable pen[.\s]*/gi, " ");
-    cleaned = cleaned.replace(/Answer all questions[.\s]*/gi, " ");
-    cleaned = cleaned.replace(/The number of marks is given in brackets[.\s]*/gi, " ");
+    // Strip UCLES headers/footers and page artifacts
+    cleaned = cleaned.replace(/©\s*UCLES[^\n\r]*/gi, "");
+    cleaned = cleaned.replace(/Cambridge (Assessment|International)[^\n\r]*/gi, "");
+    cleaned = cleaned.replace(/\[\s*Turn\s*over[^\]]*\]/gi, "");
+    cleaned = cleaned.replace(/\bTurn\s*over\b/gi, "");
+    cleaned = cleaned.replace(/\bBLANK\s+PAGE\b/gi, "");
+    cleaned = cleaned.replace(/\bPage\s+\d+\s*(of\s*\d+)?\b/gi, "");
+    cleaned = cleaned.replace(/\b\d{4}\/\d{2,4}\/[A-Z]\/[A-Z]+\/\d+\b/gi, ""); // document codes
+    cleaned = cleaned.replace(/\b[A-Z]{1,4}\d{4}\/\d{2}\b/gi, ""); // paper codes like 0478/12
 
+    // Strip front-matter boilerplate blocks
+    cleaned = cleaned.replace(/READ THESE INSTRUCTIONS FIRST[\s\S]{0,2000}?(?=\n[A-Z1-9])/gi, "");
+    cleaned = cleaned.replace(/Answer all questions\.?/gi, "");
+    cleaned = cleaned.replace(/The number of marks is given in brackets\.?/gi, "");
+    cleaned = cleaned.replace(/Write your (name|centre|candidate)[^\n]*/gi, "");
+    cleaned = cleaned.replace(/You (must|should|may|will)[^\n]{0,120}/gi, "");
+    cleaned = cleaned.replace(/This (document|booklet|paper)[^\n]{0,120}/gi, "");
+    cleaned = cleaned.replace(/If you have been given[^\n]{0,120}/gi, "");
+    cleaned = cleaned.replace(/Calculators (must|are|may)[^\n]{0,80}/gi, "");
+    cleaned = cleaned.replace(/Electronic calculators (should|must|may)[^\n]{0,80}/gi, "");
+
+    // Collapse filler phrases that add zero signal for topic classification
+    const fillerPhrases = [
+      /candidates should be able to:?/gi,
+      /candidates will be able to:?/gi,
+      /notes and guidance:?/gi,
+      /learning objectives?:?/gi,
+      /by the end of this (unit|topic|section)[^.\n]*/gi,
+      /students (should|will|must|are expected to)[^.\n]*/gi,
+      /it is (expected|assumed) that[^.\n]*/gi,
+      /please note that[^.\n]*/gi,
+      /for (the purposes of this syllabus|assessment purposes)[^.\n]*/gi,
+      /the following (is|are) (required|expected|assumed)[^.\n]*/gi,
+    ];
+    fillerPhrases.forEach(p => { cleaned = cleaned.replace(p, ""); });
+
+    // Remove lone numbers/letters that are just list markers (e.g. "1 " "a " "(i) ")
+    cleaned = cleaned.replace(/^\s*(\d+|[a-z]|\([ivxlcdm]+\)|\([a-z]\))\s+/gim, "");
+
+    // Collapse whitespace
     return cleaned
       .replace(/[ \t]+/g, " ")
       .replace(/\n{3,}/g, "\n\n")
@@ -219,9 +650,8 @@ export default function App() {
         const qpSubpartOnlyMatch = raw.match(/^(?:\((?:[a-z]|[ivxlcdm]{1,5})\)){1,3}[.):]?$/i);
 
         let number = NaN;
-        if (mode === 'ms' && msMatch?.[1]) number = Number(msMatch[1]);
-        if (mode === 'qp' && qpMainMatch?.[1]) number = Number(qpMainMatch[1]);
-        if (mode === 'qp' && !qpMainMatch && qpSubpartOnlyMatch) number = 0; // resolved later using previous main number
+        if (msMatch?.[1]) number = Number(msMatch[1]);
+        if (!msMatch && qpSubpartOnlyMatch) number = 0; // resolved later using previous main number
 
         if (!Number.isFinite(number)) return;
         if (number !== 0 && (number < 1 || number > 40)) return;
@@ -344,14 +774,24 @@ export default function App() {
           )
         : undefined;
 
+      const isFooterString = (t: string) => {
+        return (
+          /©\s*UCLES/i.test(t) ||
+          /Page\s+\d+\s+of\s+\d+/i.test(t) ||
+          /^\d{4}\/\d{2}\/[A-Z]\/[A-Z]\/\d{2}$/i.test(t) ||
+          /\[?\s*Turn\s*over\s*\]?/i.test(t) ||
+          /Permission\s+to\s+reproduce\s+items/i.test(t) ||
+          /Cambridge\s+Assessment\s+International\s+Education/i.test(t) ||
+          /copyright\s+acknowledgements/i.test(t) ||
+          /University\s+of\s+Cambridge\s+Local\s+Examinations\s+Syndicate/i.test(t)
+        );
+      };
+
       const footerCandidates = textItems
         .filter((item) => {
           const t = item.str.trim();
           return (
-            /©\s*UCLES/i.test(t) ||
-            /Page\s+\d+\s+of\s+\d+/i.test(t) ||
-            /^\d{4}\/\d{2}\/[A-Z]\/[A-Z]\/\d{2}$/i.test(t) ||
-            /\[?\s*Turn\s*over\s*\]?/i.test(t) ||
+            isFooterString(t) ||
             (/^\d{1,2}$/.test(t) && item.y > viewport.height * 0.88 && item.x > viewport.width * 0.35 && item.x < viewport.width * 0.65)
           );
         })
@@ -360,14 +800,37 @@ export default function App() {
         .sort((a, b) => a - b);
       const footerY = footerCandidates.length ? footerCandidates[0] : undefined;
 
+      const allRows = [...rowBuckets.values()].map((row) => ({
+        ...row,
+        text: row.texts.join(' '),
+      }));
+
+      const endOfContentMarkers = allRows
+        .filter((row) => {
+          const t = row.text;
+          const clean = t.replace(/\s+/g, '');
+          if (/BLANKPAGE/i.test(clean)) return true;
+
+          // Identify barcode-like text elements mathematically
+          if (clean.length >= 8 && new Set(clean.split('')).size <= 4) return true;
+          if (clean.length >= 5 && /^[█▇▆▅▄▃▂\-\|I_\.,\x00-\x08\x0B-\x1F]+$/i.test(clean)) return true;
+          if (/[\x01-\x08]/.test(clean)) return true;
+          if (/^\*\s*\d+\s*\*$/.test(t.trim())) return true;
+
+          return false;
+        })
+        .map((row) => row.y)
+        .sort((a, b) => a - b);
+
+      const contentCutoffY = endOfContentMarkers.length ? endOfContentMarkers[0] : undefined;
+
       const contentItems = textItems.filter((item) => {
         const t = item.str.trim();
         if (!t) return false;
         if (headerCutY !== undefined && item.y < headerCutY) return false;
-        if (/©\s*UCLES/i.test(t)) return false;
-        if (/Page\s+\d+\s+of\s+\d+/i.test(t)) return false;
-        if (/Turn\s*over/i.test(t)) return false;
-        if (/^\d{4}\/\d{2}\/[A-Z]\/[A-Z]\/\d{2}$/i.test(t)) return false;
+        if (footerY !== undefined && item.y >= Math.max(footerY - (viewport.height * 0.01), viewport.height * 0.65)) return false;
+        if (contentCutoffY !== undefined && item.y >= contentCutoffY - 2) return false;
+        if (isFooterString(t)) return false;
         // Ignore lone page number near top/bottom center.
         if (/^\d{1,2}$/.test(t) && item.x > viewport.width * 0.35 && item.x < viewport.width * 0.65 && (item.y < viewport.height * 0.15 || item.y > viewport.height * 0.85)) {
           return false;
@@ -384,12 +847,19 @@ export default function App() {
             Math.max(0, Math.min(...contentItems.map((item) => item.y)) - Math.max(6, viewport.height * 0.008))
           )
         : viewport.height * 0.08;
-      const contentBottomY = contentItems.length
+      let contentBottomY = contentItems.length
         ? Math.min(
             viewport.height,
             Math.max(...contentItems.map((item) => item.y + item.height)) + Math.max(8, viewport.height * 0.01)
           )
         : viewport.height * 0.9;
+
+      if (contentCutoffY !== undefined) {
+        contentBottomY = Math.min(contentBottomY, contentCutoffY - Math.max(12, viewport.height * 0.015));
+      }
+      if (footerY !== undefined) {
+        contentBottomY = Math.min(contentBottomY, footerY - Math.max(12, viewport.height * 0.015));
+      }
 
       pages.push({
         pageNumber: i,
@@ -452,14 +922,16 @@ export default function App() {
 
     const rowHasInk = (y: number) => {
       let darkPixels = 0;
-      for (let x = 0; x < width; x++) {
+      const startX = Math.floor(width * 0.08);
+      const endX = Math.ceil(width * 0.92);
+      for (let x = startX; x < endX; x++) {
         const idx = (y * width + x) * 4;
         const r = data[idx];
         const g = data[idx + 1];
         const b = data[idx + 2];
         if (r < 242 || g < 242 || b < 242) darkPixels++;
       }
-      return darkPixels > Math.max(2, Math.floor(width * 0.0025));
+      return darkPixels > Math.max(2, Math.floor((endX - startX) * 0.0025));
     };
 
     let y = height - 1;
@@ -665,28 +1137,66 @@ export default function App() {
     allAnchors.sort((a, b) => (a.pageIndex - b.pageIndex) || (a.y - b.y));
 
     const resolvedAnchors = (() => {
-      if (mode !== 'qp') return allAnchors;
       let currentMain = 0;
+      let currentLetter = '';
       const resolved: Array<{ number: number; label: string; y: number; pageIndex: number }> = [];
       allAnchors.forEach((a) => {
         if (a.number > 0) {
           currentMain = a.number;
+          currentLetter = '';
           resolved.push(a);
           return;
         }
         if (currentMain > 0) {
-          resolved.push({ ...a, number: currentMain, label: `${currentMain}${a.label}` });
+          const rawLab = a.label.toLowerCase();
+          // Detect if it's a letter (a-z) but not a roman numeral, or if it's the first few letters which are unambiguously non-roman (like a, b, e, f, h, etc.)
+          // Actually, (i), (v), (x) are roman. (a), (b), (c), (d), (e), (f), (g), (h), (j) etc are letters.
+          // In Cambridge, first tier is (a)-(z), second tier is (i)-(x).
+          if (/^\([a-z]\)$/.test(rawLab) && !/^\([ivx]+\)$/.test(rawLab)) {
+            currentLetter = a.label;
+            resolved.push({ ...a, number: currentMain, label: `${currentMain}${currentLetter}` });
+          } else if (/^\([ivx]+\)$/.test(rawLab)) {
+            resolved.push({ ...a, number: currentMain, label: `${currentMain}${currentLetter}${a.label}` });
+          } else {
+            // fallback (like (a)(i) combined)
+            const match = rawLab.match(/^(\([a-z]\))(\([ivx]+\))$/);
+            if (match) {
+               currentLetter = match[1];
+            }
+            resolved.push({ ...a, number: currentMain, label: `${currentMain}${a.label}` });
+          }
         }
       });
       return resolved;
     })();
 
-    const filteredAnchors = resolvedAnchors.filter((a, idx) => {
+    const filteredAnchorsRaw = resolvedAnchors.filter((a, idx) => {
       if (idx === 0) return true;
       const prev = resolvedAnchors[idx - 1];
       if (a.number <= 0) return false;
       return !(a.label === prev.label && a.pageIndex === prev.pageIndex && Math.abs(a.y - prev.y) < 20);
     });
+
+    const filteredAnchors: typeof filteredAnchorsRaw = [];
+    for (let i = 0; i < filteredAnchorsRaw.length; i++) {
+      const a = filteredAnchorsRaw[i];
+      const nxt = filteredAnchorsRaw[i + 1];
+
+      const aStripped = a.label.replace(String(a.number), '').toLowerCase();
+      const nxtStripped = nxt ? nxt.label.replace(String(nxt.number), '').toLowerCase() : '';
+
+      const isBareToA = aStripped === '' && nxtStripped.includes('(a)');
+      const isLetterToI = /^\([a-z]\)$/.test(aStripped) && nxtStripped === `${aStripped}(i)`;
+
+      // Absorb context paragraphs into the first immediate subpart (e.g. `2` -> `(a)`, or `(b)` -> `(i)`)
+      if (nxt && nxt.number === a.number && (isBareToA || isLetterToI)) {
+        // Expand the starting coordinate of the subpart to physically capture the context text
+        nxt.pageIndex = a.pageIndex;
+        nxt.y = a.y;
+        continue;
+      }
+      filteredAnchors.push(a);
+    }
 
     const segments: Array<{ number: number; label: string; image: string; text: string; marks: number }> = [];
 
@@ -708,6 +1218,11 @@ export default function App() {
         let toY = end
           ? (p === end.pageIndex ? Math.max(0, end.y - Math.max(8, page.height * 0.01)) : page.height)
           : page.height;
+
+        // Hard safety boundary: never extend past a detected barcode or BLANK PAGE marker.
+        if (page.contentCutoffY !== undefined) {
+          toY = Math.min(toY, Math.max(0, page.contentCutoffY - Math.max(12, page.height * 0.015)));
+        }
 
         // Keep multi-page stitching tight but don't cut diagram-only regions.
         if (toY > page.contentBottomY) {
@@ -987,46 +1502,54 @@ export default function App() {
           })
         );
         console.log('[MS_MCQ_TEXT]', { fileName, sourceUrl, parsed: mcqAnswers.size });
-        return;
+        return [];
       }
 
       showStatus(`Processing ${fileName}`);
       const msPagesAll = await renderPdfPages(pdf, 2, 'ms');
       const msPages = trimMsPrefacePages(filterExamBlankPages(msPagesAll, fileName));
       const msSegments = extractQuestionImageSegments(msPages, 'ms');
-      const msGrouped = new Map<number, string[]>();
+      const msGrouped = new Map<string, string[]>();
       msSegments.forEach((segment) => {
-        const arr = msGrouped.get(segment.number) || [];
+        const key = segment.label || String(segment.number);
+        const arr = msGrouped.get(key) || [];
         arr.push(segment.image);
-        msGrouped.set(segment.number, arr);
+        msGrouped.set(key, arr);
+
+        // Also push it to a global fallback array for the entire number, so if MS parser fails to find a subpart, we don't return totally blank.
+        const numStr = String(segment.number);
+        if (key !== numStr) {
+           const fall = msGrouped.get(numStr) || [];
+           fall.push(segment.image);
+           msGrouped.set(numStr, fall);
+        }
       });
 
       const msByQuestion = new Map<string, string[]>();
-      for (const [number, images] of msGrouped.entries()) {
-        msByQuestion.set(String(number), images);
+      for (const [key, images] of msGrouped.entries()) {
+        msByQuestion.set(key, images);
       }
-      console.log("[MARKSCHEME_IMAGE_SEGMENT_RESULT]", {
-        fileName,
-        sourceUrl,
-        segments: msSegments.length,
-        groupedQuestions: msByQuestion.size,
-      });
-      
+
       setQuestions(prev => prev.map(q => {
-        const qNumStr = q.number.toString();
-        const msImages = msByQuestion.get(qNumStr);
+        // Try precise subpart label first, otherwise use the whole question fallback
+        let msImages = undefined;
+        if (q.label && msByQuestion.has(q.label)) {
+           msImages = msByQuestion.get(q.label);
+        } else {
+           msImages = msByQuestion.get(q.number.toString());
+        }
+
         if (msImages?.length) {
-          const stitched = msImages.length === 1 ? msImages[0] : undefined;
           return {
             ...q,
             markingSchemeImages: msImages,
-            markingSchemeImage: stitched,
+            markingSchemeImage: msImages.length === 1 ? msImages[0] : undefined,
             markingScheme: undefined
           };
         }
         return q;
       }));
-      return;
+      return [];
     }
 
     showStatus(`Processing ${fileName}`);
@@ -1046,29 +1569,22 @@ export default function App() {
       throw new Error("No question segments found. Check console logs for [QUESTION_IMAGE_SEGMENT_RESULT].");
     }
 
-    const grouped = new Map<number, Array<{ image: string; text: string; marks: number }>>();
-    extracted.forEach((seg: any) => {
-      const arr = grouped.get(seg.number) || [];
-      arr.push({ image: seg.image, text: seg.text, marks: seg.marks });
-      grouped.set(seg.number, arr);
+    const categorized = extracted.map((seg, idx) => {
+      return {
+        id: `${fileName}-q${seg.number}-part${idx}`,
+        number: seg.number,
+        label: seg.label,
+        text: seg.text,
+        marks: Math.max(seg.marks, 1),
+        topicId: selectedSyllabusCode,
+        paperId: fileName,
+        questionImages: [seg.image],
+        questionImage: seg.image
+      };
     });
 
-    const categorized = [...grouped.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([number, parts]) => {
-        return {
-          id: `${fileName}-${number}-${Math.random().toString(36).substr(2, 5)}`,
-          number,
-          text: parts.map((p) => p.text).join('\n\n'),
-          marks: Math.max(...parts.map((p) => p.marks), 1),
-          topicId: selectedSyllabusCode,
-          paperId: fileName,
-          questionImages: parts.map((p) => p.image),
-          questionImage: parts.length === 1 ? parts[0].image : undefined
-        };
-      });
-
     setQuestions(prev => [...prev, ...categorized]);
+    return categorized;
   };
 
   const extractFileNameFromUrl = (url: string) => {
@@ -1155,6 +1671,11 @@ export default function App() {
     return catalogQpVariants;
   }, [catalogQpVariants, strictCatalogSubject]);
 
+  // Reset variants when critical filters change
+  useEffect(() => {
+    setSelectedVariants([]);
+  }, [qualificationLevel, selectedSyllabusCode]);
+
   useEffect(() => {
     const opts = resolvedVariantOptions;
     setSelectedVariants((prev) => {
@@ -1166,17 +1687,26 @@ export default function App() {
     });
   }, [resolvedVariantOptions]);
 
-  const buildPaperLinks = () => {
-    if (!selectedSyllabusCode.trim()) return [];
-    const fromYear = Math.max(MIN_YEAR, Math.min(startYear, endYear));
-    const toYear = Math.max(MIN_YEAR, Math.max(startYear, endYear));
+
+  const [isAutoMapped, setIsAutoMapped] = useState(false);
+
+  const buildPaperLinks = (override?: any) => {
+    const sc = override?.syllabusCode ?? selectedSyllabusCode;
+    if (!sc.trim()) return [];
+    const sy = override?.startYear ?? startYear;
+    const ey = override?.endYear ?? endYear;
+    const fromYear = Math.max(MIN_YEAR, Math.min(sy, ey));
+    const toYear = Math.max(MIN_YEAR, Math.max(sy, ey));
     const links = new Set<string>();
+
+    const sess = override?.selectedSessions ?? selectedSessions;
+    const vars = override?.selectedVariants ?? selectedVariants;
 
     for (let year = fromYear; year <= toYear; year += 1) {
       const yy = String(year).slice(-2);
-      selectedSessions.forEach((session) => {
-        selectedVariants.forEach((variant) => {
-          const file = `${selectedSyllabusCode}_${session.toLowerCase()}${yy}_qp_${variant}.pdf`;
+      sess.forEach((session: string) => {
+        vars.forEach((variant: string) => {
+          const file = `${sc}_${session.toLowerCase()}${yy}_qp_${variant}.pdf`;
           links.add(`${BASE_PAPERS_URL}${file}`);
         });
       });
@@ -1185,9 +1715,43 @@ export default function App() {
     return Array.from(links);
   };
 
+  const [validCatalogLinks, setValidCatalogLinks] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedSyllabusCode.trim()) {
+      setValidCatalogLinks(null);
+      return;
+    }
+    const params = new URLSearchParams({
+      qualificationLevel,
+      syllabusCode: selectedSyllabusCode,
+      startYear: String(startYear),
+      endYear: String(endYear),
+    });
+    if (selectedSessions.length > 0) params.set("sessions", selectedSessions.join(","));
+    if (selectedVariants.length > 0) params.set("variants", selectedVariants.join(","));
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/catalog/valid-papers?${params.toString()}`, { cache: "no-store" });
+        const data = await res.json();
+        if (cancelled) return;
+        if (!res.ok || data.error || !data.hasCatalogData) {
+          setValidCatalogLinks(null);
+          return;
+        }
+        setValidCatalogLinks(data.filenames.map((f: string) => `${BASE_PAPERS_URL}${f}`));
+      } catch {
+        if (!cancelled) setValidCatalogLinks(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [qualificationLevel, selectedSyllabusCode, startYear, endYear, selectedSessions, selectedVariants]);
+
   const paperLinks = useMemo(
-    () => buildPaperLinks(),
-    [selectedSyllabusCode, startYear, endYear, selectedSessions, selectedVariants]
+    () => validCatalogLinks ?? buildPaperLinks(),
+    [validCatalogLinks, selectedSyllabusCode, startYear, endYear, selectedSessions, selectedVariants]
   );
 
   const skipFirstQualReset = useRef(true);
@@ -1312,15 +1876,69 @@ export default function App() {
     return proxiedBuffer;
   };
 
-  const processGeneratedLinks = async (candidateLinks?: string[]) => {
+  const processGeneratedLinks = async (candidateLinks?: string[], historyTrigger?: any) => {
+    setIsAutoMapped(false);
+    setIsFilteredLocally(false);
+    setSelectedQuestionIds([]);
+    setTopics([]);
+    setQuestionTopicMappings({});
+    setSelectedTopicFilters([]);
+    setTopicsStatus('');
     const links = candidateLinks ?? buildPaperLinks();
     if (!links.length) {
       setStatus('No QP links for the current selection (sessions × years × variants).');
-      return;
+      return [];
+    }
+
+    const cost = getGenerateTokenCost(links.length);
+
+    if (!user) {
+      if (guestTokens < cost) {
+        setStatus(`Insufficient tokens. This action requires ${cost} tokens. You only have ${guestTokens}. Login to receive 15 free tokens.`);
+        setShowGuestFeatureLock(true);
+        return [];
+      }
+    } else {
+      if (!user.isAdmin && user.tokens < cost && !historyTrigger) {
+        setStatus(`Insufficient tokens. This action requires ${cost} tokens.`);
+        return [];
+      }
     }
 
     setLoading(true);
+    const allParsedQuestions: any[] = [];
+    const startTime = Date.now();
     try {
+      // 1. Deduct tokens IF it's a new generation (not a history restore)
+      if (user) {
+        if (!user.isAdmin && !historyTrigger) {
+          const decRes = await fetch(apiUrl('user/decrement-tokens'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+            body: JSON.stringify({ amount: cost })
+          });
+          const decData = await decRes.json();
+          if (!decRes.ok) throw new Error(decData.error || 'Token deduction failed');
+          setAuthState({ ...user, tokens: decData.newTokens });
+        }
+      } else if (!historyTrigger) {
+        // Guest generation - decrement server-side IP tokens
+        try {
+          const guestRes = await fetch(apiUrl('user/guest-tokens/deduct'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cost })
+          });
+          const guestData = await guestRes.json();
+          if (guestData.tokens !== undefined) {
+             setGuestTokens(guestData.tokens);
+          }
+        } catch (e) {
+          console.error("Guest token deduction failed", e);
+        }
+      }
+
+      // 2. Start processing
       let qpAttempted = 0;
       let qpSucceeded = 0;
       let msAttempted = 0;
@@ -1347,7 +1965,8 @@ export default function App() {
               refreshProcessingStatus();
               try {
                 const arrayBuffer = await fetchPdfArrayBuffer(url);
-                await processPDF(arrayBuffer, qpName, url, { suppressStatus: true });
+                const newQs = await processPDF(arrayBuffer, qpName, url, { suppressStatus: true });
+                if (newQs) allParsedQuestions.push(...newQs);
                 qpSucceeded += 1;
               } finally {
                 activeFiles.delete(qpName);
@@ -1386,13 +2005,37 @@ export default function App() {
       const totalSucceeded = qpSucceeded + msSucceeded;
       const totalFailed = totalAttempted - totalSucceeded;
       setStatus(
-        `Done. Tried ${totalAttempted} links (QP ${qpSucceeded}/${qpAttempted}, MS ${msSucceeded}/${msAttempted}). Failed: ${totalFailed}.`
+        `Done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Tried ${totalAttempted} links (QP ${qpSucceeded}/${qpAttempted}, MS ${msSucceeded}/${msAttempted}). Failed: ${totalFailed}.`
       );
+      return allParsedQuestions;
     } catch (error) {
       console.error(error);
       setStatus('Error: ' + (error as Error).message);
+      return [];
     } finally {
       setLoading(false);
+
+      // Save to history if this is a fresh manual generation (not restore)
+      if (!historyTrigger && user && links.length > 0) {
+        fetch(apiUrl('user/history'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+          body: JSON.stringify({
+            qualificationLevel,
+            syllabusCode: selectedSyllabusCode,
+            startYear,
+            endYear,
+            selectedSessions,
+            selectedVariants,
+            didFilter: false
+          })
+        }).catch(() => {});
+      }
+
+      // Automatically re-apply filter mapping when restored from history if they had filtered
+      if (historyTrigger?.didFilter) {
+        // Removed: setTimeout(() => document.getElementById('auto-map-trigger')?.click(), 800);
+      }
     }
   };
 
@@ -1407,12 +2050,192 @@ export default function App() {
     }
   };
 
+  const handleExport = async () => {
+    if (!user?.isAdmin && (user?.tier === 'free' || user?.tier === 'starter')) {
+      setAlertMessage("Export as PDF is available on the Pro plan.");
+      setAlertCanUpgrade(true);
+      return;
+    }
+    if (selectedQuestionIds.length === 0) {
+      setAlertMessage("Select questions to export first.");
+      return;
+    }
+
+    setAlertType('export');
+    setAlertMessage("Building export...");
+    
+    try {
+      const esc = (s: string) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+      const selectedQuestions = filteredQuestions.filter(q => selectedQuestionIds.includes(q.id));
+
+      // Topic label: no filter → All Topics, subset → list, all → All Topics
+      let topicLabel = 'All Topics';
+      if (selectedTopicFilters.length > 0 && topics.length > 0) {
+        if (selectedTopicFilters.length >= topics.length) {
+          topicLabel = 'All Topics';
+        } else {
+          topicLabel = selectedTopicFilters.map(id => {
+            const t = topics.find(t => t.unitId === id);
+            return t ? esc(id) + ' &middot; ' + esc(t.title) : esc(id);
+          }).join(',&nbsp; ');
+        }
+      }
+
+      const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' });
+
+      const questionsHtml = selectedQuestions.map(q => {
+        const qImages = getQuestionImages(q);
+        const msImages = getMarkSchemeImages(q);
+        const label = q.label ? 'Q' + q.label : 'Q' + q.number;
+        const showTopicBadge = false;
+        const topicBadgeHtml = '';
+        const qImagesHtml = q.parts && q.parts.length > 1
+          ? q.parts.map(part =>
+              `<div style="margin-bottom:10px;">${
+                part.topicId ? `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:9px;font-weight:700;font-family:monospace;letter-spacing:1px;padding:3px 8px;margin-bottom:6px;">${esc(part.topicId)}</span>` : ''
+              }${
+                (part.questionImages || []).map(src => `<img src="${src}" style="width:100%;display:block;margin-bottom:4px;" loading="eager" />`).join('')
+              }</div>`
+            ).join('')
+          : qImages.length
+            ? qImages.map(src => `<img src="${src}" style="width:100%;display:block;margin-bottom:6px;" loading="eager" />`).join('')
+            : '<p style="color:#9ca3af;font-size:11px;font-style:italic;">No image available</p>';
+        const msSection = msImages.length
+          ? `<div style="border-top:2px solid #2563eb;background:#eff6ff;"><div style="padding:10px 20px 6px;font-size:8px;font-weight:700;letter-spacing:2.5px;color:#2563eb;font-family:monospace;">&#10003; MARK SCHEME</div><div style="padding:0 20px 16px;">${msImages.map(src => `<img src="${src}" style="width:100%;display:block;margin-bottom:6px;" loading="eager" />`).join('')}</div></div>`
+          : '';
+        return `<div style="position:relative;border:2px solid #141414;margin-bottom:28px;break-inside:avoid;page-break-inside:avoid;">
+          ${topicBadgeHtml}
+          <div style="padding:${showTopicBadge ? '38px' : '16px'} 20px 0;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+              <span style="font-size:26px;font-style:italic;font-family:Georgia,serif;font-weight:700;">${esc(label)}</span>
+              <span style="font-size:9px;font-weight:700;font-family:monospace;background:#f3f4f6;padding:5px 10px;">${esc(q.paperId || '')}</span>
+            </div>
+          </div>
+          <div style="border-top:1px solid #e5e7eb;padding:14px 20px 4px;">
+            <div style="font-size:8px;font-weight:700;letter-spacing:2.5px;color:#141414;opacity:0.4;margin-bottom:10px;font-family:monospace;">&#9654; QUESTION</div>
+            ${qImagesHtml}
+          </div>
+          ${msSection}
+        </div>`;
+      }).join('');
+
+      const coverDiv = `<div style="width:794px;min-height:1123px;padding:68px 76px;display:flex;flex-direction:column;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:52px;">
+    <div style="width:44px;height:44px;background:#141414;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+    </div>
+    <span style="font-size:15px;font-weight:900;letter-spacing:5px;text-transform:uppercase;">PAPERRA</span>
+  </div>
+  <div style="margin-bottom:44px;">
+    <h1 style="font-size:54px;font-weight:900;letter-spacing:-2px;line-height:0.92;font-family:Georgia,serif;font-style:italic;">EXPORT</h1>
+  </div>
+  <div style="border:2px solid #141414;margin-bottom:24px;">
+    <div style="background:#141414;padding:10px 18px;">
+      <span style="color:#fff;font-size:8px;font-weight:700;letter-spacing:3px;font-family:monospace;">EXPORT DETAILS</span>
+    </div>
+    <div style="border-bottom:1px solid #e5e7eb;padding:13px 18px;display:flex;gap:16px;align-items:baseline;">
+      <span style="width:108px;flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.4;font-family:monospace;">SUBJECT</span>
+      <span style="font-size:13px;font-weight:600;">${esc(selectedSyllabusLabel)} (${esc(selectedSyllabusCode)})</span>
+    </div>
+    <div style="border-bottom:1px solid #e5e7eb;padding:13px 18px;display:flex;gap:16px;align-items:baseline;">
+      <span style="width:108px;flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.4;font-family:monospace;">TOPICS</span>
+      <span style="font-size:12px;font-weight:600;line-height:1.6;">${topicLabel}</span>
+    </div>
+    <div style="border-bottom:1px solid #e5e7eb;padding:13px 18px;display:flex;gap:16px;align-items:baseline;">
+      <span style="width:108px;flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.4;font-family:monospace;">QUESTIONS</span>
+      <span style="font-size:13px;font-weight:600;">${selectedQuestions.length}</span>
+    </div>
+    <div style="border-bottom:1px solid #e5e7eb;padding:13px 18px;display:flex;gap:16px;align-items:baseline;">
+      <span style="width:108px;flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.4;font-family:monospace;">GENERATED</span>
+      <span style="font-size:13px;font-weight:600;">${esc(dateStr)}</span>
+    </div>
+    <div style="padding:13px 18px;display:flex;gap:16px;align-items:baseline;">
+      <span style="width:108px;flex-shrink:0;font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.4;font-family:monospace;">EXPORTED BY</span>
+      <span style="font-size:13px;font-weight:600;">${esc(user?.username || '')}</span>
+    </div>
+  </div>
+  <div style="margin-top:auto;padding-top:14px;border-top:2px solid #141414;display:flex;justify-content:space-between;align-items:center;">
+    <span style="font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.22;font-family:monospace;">PAPERRA.APP</span>
+    <span style="font-size:8px;font-weight:700;letter-spacing:2px;opacity:0.22;font-family:monospace;">${esc(dateStr.toUpperCase())}</span>
+  </div>
+</div>`;
+
+      const questionsDiv = `<div style="padding:53px 68px;width:794px;background:#fff;font-family:system-ui,-apple-system,sans-serif;color:#141414;box-sizing:border-box;">
+${questionsHtml}
+</div>`;
+
+      // Inject content divs only — never inject a full HTML document into the live DOM
+      const container = document.createElement('div');
+      container.style.cssText = 'position:fixed;top:0;left:-9999px;width:794px;background:#fff;pointer-events:none;';
+      container.innerHTML = coverDiv + questionsDiv;
+      document.body.appendChild(container);
+
+      setAlertMessage('Rendering PDF... please wait.');
+      // Wait for images to decode
+      await Promise.all(
+        Array.from(container.querySelectorAll('img')).map(
+          img => img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+        )
+      );
+      await new Promise(r => setTimeout(r, 300));
+
+      const html2canvas = (await import('html2canvas')).default;
+      const { jsPDF } = await import('jspdf');
+
+      const A4_W_PX = 794;
+      const A4_H_PX = 1123;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfW = 210;
+      const pdfH = 297;
+
+      // Render cover page — use children[0]/[1] since divs have no class names
+      const coverEl = container.children[0] as HTMLElement;
+      const questionsEl = container.children[1] as HTMLElement;
+
+      const coverCanvas = await html2canvas(coverEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+      const coverImg = coverCanvas.toDataURL('image/jpeg', 0.95);
+      pdf.addImage(coverImg, 'JPEG', 0, 0, pdfW, pdfH);
+
+      // Render questions section — slice into A4 pages
+      const qCanvas = await html2canvas(questionsEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff', width: A4_W_PX, windowWidth: A4_W_PX });
+      const totalQHeight = qCanvas.height;
+      const sliceHeightPx = A4_H_PX * 2; // scale=2
+      let yOffset = 0;
+
+      while (yOffset < totalQHeight) {
+        const sliceH = Math.min(sliceHeightPx, totalQHeight - yOffset);
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = qCanvas.width;
+        sliceCanvas.height = sliceH;
+        const ctx = sliceCanvas.getContext('2d')!;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+        ctx.drawImage(qCanvas, 0, yOffset, qCanvas.width, sliceH, 0, 0, qCanvas.width, sliceH);
+        const sliceImg = sliceCanvas.toDataURL('image/jpeg', 0.95);
+        const sliceMmH = (sliceH / sliceHeightPx) * pdfH;
+        pdf.addPage();
+        pdf.addImage(sliceImg, 'JPEG', 0, 0, pdfW, sliceMmH);
+        yOffset += sliceH;
+      }
+
+      document.body.removeChild(container);
+      pdf.save(`Paperra_${esc(selectedSyllabusCode)}_${Date.now()}.pdf`);
+      setAlertMessage('PDF downloaded!');
+    } catch (err: any) {
+      console.error(err);
+      setAlertType('error');
+      setAlertMessage('Failed to generate PDF: ' + err.message);
+    }
+  };
+
   const isPhoneDevice = () => window.matchMedia('(max-width: 768px)').matches;
 
   const toggleSession = (session: string) => {
     setSelectedSessions((prev) =>
       prev.includes(session) ? prev.filter((s) => s !== session) : [...prev, session]
     );
+    setSelectedVariants([]);
   };
 
   const toggleVariant = (variant: string) => {
@@ -1466,41 +2289,179 @@ export default function App() {
     setPreviewIndex(0);
   };
 
-  const filteredQuestions = useMemo(() => {
-    if (!selectedTopicFilter) return questions;
-    // Map topic ID or full string to matched topic; if it says "1.1", ensure it matches.
-    return questions.filter(q => {
-      const mapped = questionTopicMappings[q.id];
-      if (!mapped) return false;
-      return mapped === selectedTopicFilter || mapped.startsWith(selectedTopicFilter);
-    });
-  }, [questions, selectedTopicFilter, questionTopicMappings]);
+  const [selectedTopicFilters, setSelectedTopicFilters] = useState<string[]>([]);
 
-  const handleFilterWithAI = async () => {
-    if (!syllabusPdfUrl) return setTopicsError('Please enter a syllabus PDF URL.');
-    if (!user) return setTopicsError('Login required.');
-    if (user.filterLimit <= 0) return setTopicsError('Filter limit reached.');
+  const filteredQuestions = useMemo(() => {
+    if (selectedTopicFilters.length === 0) {
+      // Group subparts into one card per Paper + Question Number
+      const grouped = new Map<string, Question>();
+      questions.forEach(q => {
+        const key = `${q.paperId}-${q.number}`;
+        const mappedTopic = questionTopicMappings[q.id];
+        if (!grouped.has(key)) {
+          grouped.set(key, {
+            ...q,
+            id: key,
+            topicId: mappedTopic ?? q.topicId,
+            questionImages: [...(q.questionImages || [])],
+            markingSchemeImages: q.markingSchemeImages ? [...q.markingSchemeImages] : undefined,
+            parts: isAutoMapped ? [{
+              label: q.label,
+              topicId: mappedTopic,
+              questionImages: q.questionImages ? [...q.questionImages] : undefined,
+              markingSchemeImages: q.markingSchemeImages ? [...q.markingSchemeImages] : undefined,
+              text: q.text
+            }] : undefined
+          });
+        } else {
+          const existing = grouped.get(key)!;
+          if (q.questionImages) existing.questionImages!.push(...q.questionImages);
+          if (q.text) existing.text += '\n\n' + q.text;
+          if (q.markingSchemeImages) {
+            if (!existing.markingSchemeImages) existing.markingSchemeImages = [];
+            q.markingSchemeImages.forEach(img => {
+              if (!existing.markingSchemeImages!.includes(img)) existing.markingSchemeImages!.push(img);
+            });
+          }
+          existing.marks = Math.max(existing.marks, q.marks);
+          if (isAutoMapped && existing.parts) {
+            existing.parts.push({
+              label: q.label,
+              topicId: mappedTopic,
+              questionImages: q.questionImages ? [...q.questionImages] : undefined,
+              markingSchemeImages: q.markingSchemeImages ? [...q.markingSchemeImages] : undefined,
+              text: q.text
+            });
+          }
+        }
+      });
+      return Array.from(grouped.values()).sort((a, b) => a.number - b.number);
+    }
+    // When filters are active, dynamically group subparts by Q number + matching topic
+    const filteredGroupProps = new Map<string, { q: Question; labels: string[] }>();
+    questions.forEach(q => {
+      const mapped = questionTopicMappings[q.id];
+      if (!mapped) return;
+      if (!selectedTopicFilters.some(filter => mapped === filter || mapped.startsWith(filter))) return;
+
+      const key = `${q.paperId}-${q.number}-${mapped}`;
+      if (!filteredGroupProps.has(key)) {
+        filteredGroupProps.set(key, {
+          q: {
+            ...q,
+            id: key,
+            topicId: mapped,
+            questionImages: [...(q.questionImages || [])],
+            markingSchemeImages: q.markingSchemeImages ? [...q.markingSchemeImages] : undefined
+          },
+          labels: q.label ? [q.label] : []
+        });
+      } else {
+        const existing = filteredGroupProps.get(key)!;
+        if (q.label) existing.labels.push(q.label);
+        if (q.questionImages) existing.q.questionImages!.push(...q.questionImages);
+        if (q.text) existing.q.text += '\n\n' + q.text;
+
+        if (q.markingSchemeImages) {
+          if (!existing.q.markingSchemeImages) existing.q.markingSchemeImages = [];
+
+          // Avoid pushing duplicate MS images! Very likely in global fallback cases.
+          q.markingSchemeImages.forEach(img => {
+             if (!existing.q.markingSchemeImages!.includes(img)) {
+                 existing.q.markingSchemeImages!.push(img);
+             }
+          });
+        }
+
+        existing.q.marks = Math.max(existing.q.marks, q.marks);
+      }
+    });
+
+    return Array.from(filteredGroupProps.values()).map(({ q, labels }) => {
+       if (labels.length > 0) {
+          const stripped = labels.map(l => l.replace(new RegExp(`^${q.number}`), '').replace(/\(([^)]+)\)/g, ' $1)').trim());
+          q.label = `${q.number} ${stripped.join(', ')}`.trim();
+       } else {
+          q.label = String(q.number);
+       }
+       return q;
+    }).sort((a, b) => a.number - b.number);
+  }, [questions, selectedTopicFilters, questionTopicMappings]);
+
+  const toggleTopicFilter = (unitId: string) => {
+    setSelectedTopicFilters((prev) =>
+      prev.includes(unitId) ? prev.filter((id) => id !== unitId) : [...prev, unitId]
+    );
+  };
+
+  const getSyllabusWebpageUrl = (level: string, label: string, code: string) => {
+    let prefix = '';
+    if (level === 'igcse') prefix = 'cambridge-igcse-';
+    else if (level === 'olevel') prefix = 'cambridge-o-level-';
+    else if (level === 'alevel') prefix = 'cambridge-international-as-and-a-level-';
+
+    let slug = label
+      .toLowerCase()
+      .replace(/\s*\([^)]*\)/g, (match) => match.replace(/[^a-z0-9]/g, '-'))
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    // Remove the code suffix from the label if it already exists there
+    if (slug.endsWith(`-${code}`)) {
+      slug = slug.substring(0, slug.length - code.length - 1);
+    }
+
+    return `https://www.cambridgeinternational.org/programmes-and-qualifications/${prefix}${slug}-${code}/`;
+  };
+
+  const selectedSyllabusLabel = getSyllabusLabel(selectedSyllabusCode);
+
+  const handleFilterWithAI = async (overrideQuestions?: any[]) => {
+    // Safety: ensure overrideQuestions is actually an array (not a click event)
+    const rawTarget = Array.isArray(overrideQuestions) ? overrideQuestions : questions;
+    const targetQuestions = Array.isArray(rawTarget) ? rawTarget : [];
     
+    if (!user) return setTopicsError('Please login');
+    if (!user.isAdmin && user.tokens <= 0) return setTopicsError('Token limit reached.');
+    
+    if (targetQuestions.length === 0) {
+      console.warn("[FILTER_ABORTED] No questions available for filtering", { questions, overrideQuestions });
+      return setTopicsError('Generate questions first.');
+    }
+    if (!selectedSyllabusCode) return setTopicsError('No syllabus selected.');
+
     setTopicsLoading(true);
+    setTopicsStatus('');
     setTopicsError('');
     try {
-      const u = syllabusPdfUrl.startsWith('/') 
-        ? `https://www.cambridgeinternational.org${syllabusPdfUrl}` 
-        : syllabusPdfUrl;
+      setTopicsStatus('CHECKING CACHE...');
+      const cacheCheckRes = await fetch(apiUrl(`topics/check-cache?syllabusCode=${selectedSyllabusCode}`));
+      const cacheCheckData = await cacheCheckRes.json().catch(() => ({ cached: false }));
 
-      const fullUrl = apiUrl(`proxy-pdf?url=${encodeURIComponent(u)}`);
-      const pdf = await pdfjsLib.getDocument({
-        url: fullUrl,
-        cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
-        cMapPacked: true,
-        standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
-      }).promise;
-      
-      const text = await extractTextFromPdf(pdf, 1);
-      
-      const qsToSend = questions.map(q => ({
+      let textToPass = '';
+      if (!cacheCheckData.cached) {
+        setTopicsStatus('FETCHING SYLLABUS PDF...');
+        const u = getSyllabusWebpageUrl(qualificationLevel, selectedSyllabusLabel, selectedSyllabusCode);
+        const fullUrl = apiUrl(`proxy-pdf?url=${encodeURIComponent(u)}`);
+        const pdf = await pdfjsLib.getDocument({
+          url: fullUrl,
+          cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
+          cMapPacked: true,
+          standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
+        }).promise;
+
+        setTopicsStatus('PARSING PDF...');
+        const rawText = await extractTextFromPdf(pdf, 1);
+        textToPass = cleanPdfTextForAI(rawText);
+      } else {
+        setTopicsStatus('TOPICS FOUND. SENDING TO AI...');
+      }
+
+      if (textToPass) setTopicsStatus('TOPICS EXTRACTED. SENDING TO AI...');
+      const qsToSend = targetQuestions.map(q => ({
         id: q.id,
-        text: q.questionText || ''
+        number: q.number,
+        text: q.text || ''
       }));
 
       const res = await fetch(apiUrl('topics/filter-questions'), {
@@ -1509,22 +2470,43 @@ export default function App() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${user.token}`
         },
-        body: JSON.stringify({ syllabusText: cleanPdfTextForAI(text), questions: qsToSend })
+        body: JSON.stringify({
+          syllabusCode: selectedSyllabusCode,
+          syllabusText: textToPass,
+          questions: qsToSend
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
       setTopics(data.topics);
       setQuestionTopicMappings(data.mappings);
-      setUser({ ...user, filterLimit: data.newLimit });
-      setSelectedTopicFilter('');
-    } catch (e: any) {
-      setTopicsError(e.message);
+      console.log("[FILTER_DEBUG] Mappings received:", data.mappings);
+      setAuthState({ ...user, tokens: data.newLimit });
+      setSelectedTopicFilters([]);
+      setIsAutoMapped(true);
+      setIsFilteredLocally(true);
+
+      // Update history log as "Filtered"
+      fetch(apiUrl('user/history'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
+        body: JSON.stringify({
+          qualificationLevel,
+          syllabusCode: selectedSyllabusCode,
+          startYear,
+          endYear,
+          selectedSessions,
+          selectedVariants,
+          didFilter: true
+        })
+      });
+    } catch (err: any) {
+      setTopicsError(err.message);
     } finally {
       setTopicsLoading(false);
     }
   };
-  const selectedSyllabusLabel = getSyllabusLabel(selectedSyllabusCode);
   const generatedLinkCount = paperLinks.length;
 
   const syllabusPoolForPicker = useMemo(() => {
@@ -1542,223 +2524,529 @@ export default function App() {
     [syllabusPoolForPicker, syllabusSearch]
   );
 
+  const restoreHistoryAndRun = async (h: any) => {
+    setAlertType('restore');
+    setAlertMessage(`Restoring session for ${h.syllabusCode}...`);
+    setQualificationLevel(h.qualificationLevel as any);
+    setSelectedSyllabusCode(h.syllabusCode);
+    setStartYear(h.startYear);
+    setEndYear(h.endYear);
+    setSelectedSessions(h.selectedSessions);
+    setSelectedVariants(h.selectedVariants);
+    setQuestions([]);
+    setSelectedQuestionIds([]);
+    setStatus('');
+    try {
+      const links = buildPaperLinks(h);
+      const restoredQs = await processGeneratedLinks(links, h);
+      if (h.didFilter && restoredQs && restoredQs.length > 0) {
+         await handleFilterWithAI(restoredQs);
+      }
+      setAlertMessage(null);
+      setSidebarTab('filter');
+    } catch (e: any) {
+      console.error(e);
+      setAlertType('error');
+      setAlertMessage(`Restore failed: ${e.message}`);
+      setStatus(`Error: ${e.message}`);
+    }
+  };
+
+
+
   return (
-    <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans">
-      <header className="border-b border-[#141414] p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans flex flex-col">
+      <header className="border-b border-[#141414] p-6 flex items-center justify-between gap-4 bg-white sticky top-0 z-40">
+        <div className="flex items-center gap-2.5 h-10">
           <button
             type="button"
-            onClick={onPaperraIconClick}
-            className="shrink-0 rounded-sm p-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414]"
-            aria-label="Paperra"
-            title="Paperra"
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+            className="shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414] hover:opacity-70 transition-opacity"
+            aria-label="Paperra Home"
           >
-            <BookOpen className="w-12 h-12" strokeWidth={1.5} aria-hidden />
+            <BookOpen className="w-9 h-9" strokeWidth={1.5} />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Paperra</h1>
-            <p className="text-[10px] leading-snug font-mono opacity-60 italic max-w-md">
-              Fetch past papers and extract questions and answers
-              <br />
-              for Cambridge O Level, IGCSE and A &amp; AS Level
-            </p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight leading-none">Paperra</h1>
           </div>
         </div>
-        
-        <div className="flex items-center">
-          {user ? (
-            <div className="flex items-center gap-4">
-              <span className="text-[10px] font-mono opacity-70">
-                Hi, <strong className="font-sans text-xs">{user.username}</strong>
-                <br />
-                Limit: {user.filterLimit}
+
+        <nav className="flex items-center gap-3 sm:gap-4">
+          <div className="flex items-center h-full gap-2">
+            <div className="flex items-center h-full border-2 border-blue-600 bg-blue-600 text-white">
+              <span className="px-3 sm:px-4 py-1.5 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider leading-none">
+                Tokens: {user ? user.tokens : guestTokens}
               </span>
+            </div>
+            {!user && (
               <button
                 onClick={() => {
-                  setUser(null);
-                  fetch(apiUrl('user/logout'), { method: 'POST', headers: { Authorization: `Bearer ${user.token}` } }).catch(() => {});
+                  setUserModalMode('login');
+                  setUserModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 border border-[#141414] px-3 py-1.5 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414]"
-                aria-label="Logout"
+                className="flex items-center h-full border-2 border-[#141414] bg-[#141414] text-white hover:bg-white hover:text-[#141414] transition-all"
               >
-                <LogOut className="w-3.5 h-3.5" strokeWidth={2} />
-                <span className="text-[10px] font-bold uppercase tracking-wider">Log out</span>
+                <div className="px-3 sm:px-4 py-1.5 flex items-center">
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider leading-none">Log in</span>
+                </div>
               </button>
-            </div>
-          ) : (
+            )}
+          </div>
+
+          {/* MOBILE AUTH BUTTONS */}
+          <div className="flex sm:hidden">
+            {user && (
+              <button
+                onClick={() => setShowProfileModal(true)}
+                className="p-1.5 border-2 border-[#141414] bg-[#141414] text-white hover:bg-white hover:text-[#141414] transition-all flex items-center justify-center"
+                aria-label="Profile"
+              >
+                <User className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          <div className="hidden sm:flex items-center gap-4">
+            {user && (
+              <>
+                <button
+                  onClick={() => setShowShopModal(true)}
+                  className="px-4 py-1.5 border-2 border-[#141414] bg-[#141414] text-white text-[11px] font-bold uppercase tracking-wider hover:bg-white hover:text-[#141414] transition-all"
+                >
+                  Pricing
+                </button>
+
+                <button
+                  onClick={() => setShowProfileModal(true)}
+                  className="px-4 py-1.5 border-2 border-[#141414] bg-[#141414] text-white text-[11px] font-bold uppercase tracking-wider hover:bg-white hover:text-[#141414] transition-all"
+                >
+                  Profile
+                </button>
+              </>
+            )}
+          </div>
+
+          {user && (
             <button
-              onClick={() => setUserModalOpen(true)}
-              className="flex items-center gap-1.5 border border-[#141414] bg-[#141414] text-white px-3 py-1.5 hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#141414]"
-              aria-label="Login"
+              onClick={() => setMobileMenuOpen(true)}
+              className="sm:hidden p-1.5 border-2 border-[#141414] hover:bg-gray-100 transition-colors"
             >
-              <User className="w-3.5 h-3.5" strokeWidth={2} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Sign In</span>
+              <Menu className="w-5 h-5" />
             </button>
           )}
-        </div>
+        </nav>
       </header>
 
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-[150] sm:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="absolute right-0 top-0 h-full w-[280px] bg-white border-l-4 border-[#141414] shadow-2xl p-6"
+            >
+              <div className="flex justify-between items-center mb-10">
+                <span className="text-xl font-bold tracking-tight leading-none -translate-y-[0.5px]">Menu</span>
+                <button onClick={() => setMobileMenuOpen(false)} className="p-1 hover:bg-gray-100 border-2 border-[#141414]">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                {user && (
+                  <>
+                    <button
+                      onClick={() => { setMobileMenuOpen(false); setShowShopModal(true); }}
+                      className="w-full text-left p-4 border-2 border-[#141414] bg-[#141414] text-white text-[11px] font-bold uppercase tracking-wider hover:bg-white hover:text-[#141414] transition-all"
+                    >
+                      Pricing
+                    </button>
+                    <button
+                      onClick={() => { setMobileMenuOpen(false); setShowRequestModal(true); }}
+                      className="w-full text-left p-4 border-2 border-[#141414] bg-white text-[#141414] text-[11px] font-bold uppercase tracking-wider hover:bg-[#141414] hover:text-white transition-all"
+                    >
+                      Submit Request
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <UserHistoryModal
+        isOpen={userHistoryOpen}
+        onClose={() => setUserHistoryOpen(false)}
+        token={user?.token}
+        onRestore={restoreHistoryAndRun}
+      />
       <AdminPanel
         open={adminOpen}
         onClose={() => setAdminOpen(false)}
-        token={adminToken}
-        onToken={setAdminToken}
+        token={user?.isAdmin ? user.token : null}
+        requests={adminRequests}
+        loadingReqs={loadingRequests}
+        deleteRequest={deleteAdminRequest}
+        updateRequestStatus={updateAdminRequestStatus}
       />
 
-      <main className="max-w-7xl mx-auto p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <main className="flex-1 w-full max-w-7xl mx-auto p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
         <div className="lg:col-span-1 space-y-6">
-          <section className="relative bg-white border border-[#141414] p-6 space-y-4">
-            <h2 className="text-xs font-bold uppercase tracking-widest border-b border-[#141414] pb-2 flex items-center justify-between">
-              Paper Source
-              <LinkIcon className="w-3 h-3" />
-            </h2>
+          <section className="relative bg-white border border-[#141414] overflow-hidden">
+            <div className="flex border-b border-[#141414]">
+              <button
+                onClick={() => setSidebarTab('source')}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-colors ${
+                  sidebarTab === 'source' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50 border-r border-[#141414]'
+                }`}
+              >
+                Source
+              </button>
+              <button
+                onClick={() => {
+                  if (!user) setShowGuestFeatureLock(true);
+                  else setSidebarTab('filter');
+                }}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+                  sidebarTab === 'filter' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50 border-r border-[#141414]'
+                } ${!user ? 'opacity-60' : ''}`}
+              >
+                Filter
+                {!user && <Lock className="w-3 h-3 text-blue-600" />}
+              </button>
+              <button
+                onClick={() => {
+                  if (!user) setShowGuestFeatureLock(true);
+                  else setSidebarTab('export');
+                }}
+                className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-1.5 ${
+                  sidebarTab === 'export' ? 'bg-[#141414] text-white' : 'bg-white text-[#141414] hover:bg-gray-50'
+                } ${!user ? 'opacity-60' : ''}`}
+              >
+                Export
+                {!user && <Lock className="w-3 h-3 text-blue-600" />}
+              </button>
+            </div>
             
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono uppercase opacity-50">Qualification</label>
-                <div className="flex flex-wrap gap-1">
-                  {QUALIFICATION_LEVELS.map((q) => (
-                    <button
-                      key={q.id}
-                      type="button"
-                      onClick={() => setQualificationLevel(q.id)}
-                      disabled={loading}
-                      className={`flex-1 min-w-[5.5rem] border px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide ${
-                        qualificationLevel === q.id
-                          ? 'bg-[#141414] text-white border-[#141414]'
-                          : 'border-[#141414] border-opacity-30 hover:bg-gray-100'
-                      }`}
+            <div className="p-6 pt-4 relative">
+              {!user && showGuestFeatureLock && (
+                <div className="absolute inset-0 z-[30] bg-white/80 backdrop-blur-[1px] flex items-center justify-center p-6 text-center select-none">
+                  <motion.div 
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="bg-white border-2 border-[#141414] p-6 shadow-[6px_6px_0px_#141414] flex flex-col items-center gap-4 max-w-[200px] relative"
+                  >
+                    <button 
+                      onClick={() => setShowGuestFeatureLock(false)}
+                      className="absolute top-4 right-4 text-[#141414] hover:opacity-60 z-10"
                     >
-                      {q.label}
+                      <X className="w-5 h-5" />
                     </button>
-                  ))}
+                    <div className="w-12 h-12 bg-blue-50 border-2 border-blue-600 rounded-full flex items-center justify-center">
+                      <Lock className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-[#141414]">
+                        {(guestTokens < getGenerateTokenCost(paperLinks.length) && paperLinks.length > 0) ? 'Insufficient Tokens' : 'Locked Content'}
+                      </p>
+                      <p className="text-[9px] font-mono leading-tight text-[#141414]">
+                        {(guestTokens < getGenerateTokenCost(paperLinks.length) && paperLinks.length > 0)
+                          ? `This action requires ${getGenerateTokenCost(paperLinks.length)} tokens. You only have ${guestTokens}. Login to receive 15 free tokens.` 
+                          : 'Feature restricted. Login to unlock specific topic filtering and exporting.'}
+                      </p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setUserModalMode('login');
+                        setUserModalOpen(true);
+                      }}
+                      className="w-full bg-[#141414] text-white py-2.5 text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-colors"
+                    >
+                      LOGIN NOW
+                    </button>
+                  </motion.div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono uppercase opacity-50 flex items-center gap-1">
-                  Syllabus
-                </label>
-                <input
-                  value={syllabusSearch}
-                  onChange={(e) => setSyllabusSearch(e.target.value)}
-                  disabled={loading}
-                  placeholder="Search subject or code (e.g. Computer Science, 0478)"
-                  className="w-full p-2 border border-[#141414] border-opacity-20 focus:border-opacity-100 outline-none text-xs"
-                />
-                <div className="max-h-40 overflow-y-auto border border-[#141414] border-opacity-10">
-                  {filteredSyllabusOptions.map((item) => (
-                    <button
-                      key={`${item.code}-${item.label}`}
-                      onClick={() => selectSyllabus(item)}
-                      disabled={item.unavailable}
-                      className={`w-full text-left px-2 py-1.5 text-[11px] border-b border-[#141414] border-opacity-10 last:border-b-0 ${
-                        selectedSyllabusCode === item.code
-                          ? 'bg-[#141414] text-white'
-                          : item.unavailable
-                            ? 'opacity-40 cursor-not-allowed'
-                            : 'hover:bg-gray-100'
-                      }`}
-                    >
-                      {item.label}{item.unavailable ? ' (No content)' : ''}
-                    </button>
-                  ))}
-                  {!filteredSyllabusOptions.length && (
-                    <div className="px-2 py-2 text-[11px] opacity-60">
-                      {refreshedSyllabusCodes === undefined
-                        ? 'Loading subject list…'
-                        : refreshedSyllabusCodes !== null && refreshedSyllabusCodes.length === 0
-                          ? 'No subjects in the shared catalog yet.'
-                          : 'No matching syllabus found.'}
+              )}
+              {sidebarTab === 'source' ? (
+                <div className="space-y-3">
+                  <div className="flex justify-end -mt-2 mb-1">
+                    <button 
+                       onClick={() => setShowInfoModal(true)}
+                       className="text-blue-600 hover:text-[#141414] transition-colors"
+                     >
+                       <span className="text-[8px] font-black uppercase tracking-widest">How to use</span>
+                     </button>
+                  </div>
+                  <div className="space-y-[5px]">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 block">Qualification</label>
+                    <div className="flex flex-wrap gap-1">
+                      {QUALIFICATION_LEVELS.map((q) => (
+                        <button
+                          key={q.id}
+                          type="button"
+                          onClick={() => setQualificationLevel(q.id)}
+                          disabled={loading}
+                          className={`flex-1 min-w-[5.5rem] border px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide ${
+                            qualificationLevel === q.id
+                              ? 'bg-[#141414] text-white border-[#141414]'
+                              : 'border-[#141414] border-opacity-30 hover:bg-gray-100'
+                          }`}
+                        >
+                          {q.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-[5px]">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 flex items-center gap-1">
+                      Syllabus
+                    </label>
+                    <div className="relative">
+                      <input
+                        value={syllabusSearch}
+                        onChange={(e) => setSyllabusSearch(e.target.value)}
+                        disabled={loading}
+                        placeholder="Search subject or code"
+                        className="w-full p-2 pr-8 border border-[#141414] border-opacity-20 focus:border-opacity-100 outline-none text-xs"
+                      />
+                      <Search className="w-4 h-4 absolute right-2 top-1/2 -translate-y-1/2 text-[#141414]" />
+                    </div>
+                    <div className="max-h-40 overflow-y-auto border border-[#141414] border-opacity-10">
+                      {filteredSyllabusOptions.map((item) => (
+                        <button
+                          key={`${item.code}-${item.label}`}
+                          onClick={() => selectSyllabus(item)}
+                          disabled={item.unavailable}
+                          className={`w-full text-left px-2 py-1.5 text-[11px] border-b border-[#141414] border-opacity-10 last:border-b-0 ${
+                            selectedSyllabusCode === item.code
+                              ? 'bg-[#141414] text-white'
+                              : item.unavailable
+                                ? 'opacity-40 cursor-not-allowed'
+                                : 'hover:bg-gray-100'
+                          }`}
+                        >
+                          {item.label}{item.unavailable ? ' (No content)' : ''}
+                        </button>
+                      ))}
+                      {!filteredSyllabusOptions.length && (
+                        <div className="px-2 py-2 text-[11px] opacity-60">
+                          {refreshedSyllabusCodes === undefined
+                            ? 'Loading subject list…'
+                            : refreshedSyllabusCodes !== null && refreshedSyllabusCodes.length === 0
+                              ? 'No subjects in the shared catalog yet.'
+                              : 'No matching syllabus found.'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-[5px]">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 block">Session letters</label>
+                    <div className="grid grid-cols-7 gap-1">
+                      {SESSION_OPTIONS.map((session) => (
+                        <button
+                          key={session}
+                          onClick={() => toggleSession(session)}
+                          className={`border p-1 text-[10px] font-bold uppercase ${selectedSessions.includes(session) ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414] border-opacity-30 hover:bg-gray-100'}`}
+                        >
+                          {session}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-[5px]">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 block">Paper variant</label>
+                    {resolvedVariantOptions.length === 0 ? (
+                      <p className="text-[10px] font-mono text-blue-600 font-bold text-center">
+                        Please select a year.
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-3 gap-2">
+                        {resolvedVariantOptions.map((variant) => (
+                          <button
+                            key={variant}
+                            type="button"
+                            onClick={() => toggleVariant(variant)}
+                            className={`border p-2 text-[10px] font-bold uppercase ${selectedVariants.includes(variant) ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414] border-opacity-30 hover:bg-gray-100'}`}
+                          >
+                            {variant}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-[5px]">
+                    <label className="text-[10px] font-bold uppercase tracking-widest opacity-50 block">Year Range</label>
+                    <input
+                      value={yearRange}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setYearRange(val);
+                        const parts = val.split('-').map(p => parseInt(p.trim(), 10)).filter(p => !isNaN(p));
+                        if (parts.length === 2) {
+                          setStartYear(Math.min(...parts));
+                          setEndYear(Math.max(...parts));
+                        } else if (parts.length === 1 && /^\d{4}$/.test(val.trim())) {
+                          setStartYear(parts[0]);
+                          setEndYear(parts[0]);
+                        }
+                      }}
+                      disabled={loading}
+                      placeholder="2017-2026 or 2026"
+                      className="w-full p-2 border border-[#141414] border-opacity-20 focus:border-opacity-100 outline-none text-xs"
+                    />
+                  </div>
+                  
+                  <div className="pt-2 space-y-4">
+                    <div className="flex flex-col gap-2">
+                        <button
+                          onClick={handleProcessLinks}
+                          disabled={
+                            loading ||
+                            (!user && guestTokens < getGenerateTokenCost(paperLinks.length)) ||
+                            !selectedSyllabusCode.trim() ||
+                            selectedSessions.length === 0 ||
+                            selectedVariants.length === 0
+                          }
+                          className="w-full border border-[#141414] bg-[#141414] text-white p-3 text-[11px] font-bold uppercase hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        >
+                          <Zap className="w-4 h-4" />
+                          Generate {paperLinks.length > 0 ? (
+                            `(${getGenerateTokenCost(paperLinks.length)} ${getGenerateTokenCost(paperLinks.length) === 1 ? 'TOKEN' : 'TOKENS'})`
+                          ) : ''}
+                        </button>
+                    </div>
+
+                    {(status || paperLinks.length > 0) && (
+                      <p
+                        className={`text-[10px] font-mono text-center text-blue-600 break-words [overflow-wrap:anywhere] uppercase font-bold tracking-tight ${loading ? 'animate-pulse' : ''}`}
+                      >
+                        {status || `${paperLinks.length} QP FOUND`}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : sidebarTab === 'filter' ? (
+                <div className="space-y-5">
+                  <div className="space-y-[5px]">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-50">Topicwise AI Filter</h3>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
+                      <button 
+                        onClick={handleFilterWithAI}
+                        disabled={isAutoMapped || topicsLoading || !user || !selectedSyllabusCode || questions.length === 0}
+                        className="flex-1 px-3 py-2.5 border border-[#141414] bg-[#141414] text-white text-[10px] font-bold uppercase hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        {topicsLoading ? (
+                          'Processing...'
+                        ) : isAutoMapped ? (
+                          <span className="flex items-center gap-1.5"><CheckCircle2 className="w-3 h-3" /> Filtered</span>
+                        ) : (
+                          <>
+                            <Filter className="w-3.5 h-3.5" />
+                            {`Filter (10 Tokens)`}
+                          </>
+                        )}
+                      </button>
+                      {(topicsLoading || topics.length > 0) && (
+                        <p className={`text-[10px] font-mono text-center text-blue-600 uppercase font-bold tracking-tight ${topicsLoading ? 'animate-pulse' : ''}`}>
+                          {topicsLoading ? (topicsStatus || 'LOADING...') : `${topics.length} TOPICS FOUND`}
+                        </p>
+                      )}
+
+                        {questions.length === 0 && user && (
+                          <div className="text-center">
+                            <p className="text-[10px] font-mono uppercase text-blue-600 font-bold">Generate Papers First</p>
+                          </div>
+                        )}
+
+                      {topicsError && (
+                        <p className={`text-[10px] font-mono text-center text-red-600 uppercase font-bold tracking-tight`}>{topicsError}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {topics.length > 0 && (
+                    <div className="space-y-[5px] pt-4 border-t border-[#141414] border-opacity-10">
+                      <label className="text-[10px] font-bold uppercase opacity-50 block">Select topics:</label>
+                      <div className="grid gap-1 max-h-96 overflow-y-auto pr-1">
+                        {topics.map(t => (
+                          <button 
+                            key={t.unitId}
+                            onClick={() => toggleTopicFilter(t.unitId)}
+                            className={`px-3 py-2 text-[10px] border font-bold text-left uppercase transition-colors ${selectedTopicFilters.includes(t.unitId) ? 'bg-[#141414] text-white border-[#141414]' : 'bg-transparent text-[#141414] border-[#141414] border-opacity-20 hover:border-opacity-100 hover:bg-gray-50'}`}
+                          >
+                            <span className="opacity-40 mr-2">{t.unitId}</span> {t.title}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono uppercase opacity-50">Session letters</label>
-                <div className="grid grid-cols-7 gap-1">
-                  {SESSION_OPTIONS.map((session) => (
-                    <button
-                      key={session}
-                      onClick={() => toggleSession(session)}
-                      className={`border p-1 text-[10px] font-bold uppercase ${selectedSessions.includes(session) ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414] border-opacity-30 hover:bg-gray-100'}`}
-                    >
-                      {session}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono uppercase opacity-50">Paper variant</label>
-                {resolvedVariantOptions.length === 0 ? (
-                  <p className="text-[10px] font-mono text-amber-800">
-                    No QP links marked available in the shared catalog for this syllabus. Run an admin link refresh for
-                    this subject or choose another.
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-3 gap-2">
-                    {resolvedVariantOptions.map((variant) => (
+              ) : (
+                <div className="space-y-5">
+                  <div className="space-y-[5px]">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-50">Bulk Export</h3>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2">
                       <button
-                        key={variant}
-                        type="button"
-                        onClick={() => toggleVariant(variant)}
-                        className={`border p-2 text-[10px] font-bold uppercase ${selectedVariants.includes(variant) ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414] border-opacity-30 hover:bg-gray-100'}`}
+                        onClick={handleExport}
+                        disabled={filteredQuestions.length === 0}
+                        className="flex-1 px-3 py-2.5 border border-[#141414] bg-[#141414] text-white text-[10px] font-bold uppercase hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                       >
-                        {variant}
+                        <Download className="w-4 h-4" />
+                        Export {selectedQuestionIds.length > 0 ? `(${selectedQuestionIds.length})` : ''}
                       </button>
-                    ))}
+
+                      {questions.length === 0 && user && (
+                        <div className="text-center">
+                          <p className="text-[10px] font-mono uppercase text-blue-600 font-bold">Generate Papers First</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase opacity-50">Start year</label>
-                  <select
-                    value={startYear}
-                    onChange={(e) => setStartYear(Number(e.target.value))}
-                    disabled={loading}
-                    className="w-full p-2 border border-[#141414] border-opacity-20 focus:border-opacity-100 outline-none text-xs"
-                  >
-                    {YEAR_OPTIONS.map((year) => <option key={`from-${year}`} value={year}>{year}</option>)}
-                  </select>
+                  {filteredQuestions.length > 0 && (
+                    <div className="space-y-[5px] pt-4 border-t border-[#141414] border-opacity-10">
+                      <div 
+                        onClick={() => {
+                          if (selectedQuestionIds.length === filteredQuestions.length) {
+                            setSelectedQuestionIds([]);
+                          } else {
+                            setSelectedQuestionIds(filteredQuestions.map(q => q.id));
+                          }
+                        }}
+                        className="flex items-center gap-3 p-3 border border-[#141414] bg-gray-50 cursor-pointer hover:bg-gray-100 transition-colors"
+                      >
+                         <div className="w-4 h-4 border border-[#141414] flex items-center justify-center bg-white">
+                            {selectedQuestionIds.length === filteredQuestions.length && filteredQuestions.length > 0 && (
+                              <div className="w-2.5 h-2.5 bg-[#141414]" />
+                            )}
+                         </div>
+                         <span className="text-[10px] font-bold uppercase tracking-widest">Select All ({filteredQuestions.length})</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] font-mono uppercase opacity-50">End year</label>
-                  <select
-                    value={endYear}
-                    onChange={(e) => setEndYear(Number(e.target.value))}
-                    disabled={loading}
-                    className="w-full p-2 border border-[#141414] border-opacity-20 focus:border-opacity-100 outline-none text-xs"
-                  >
-                    {YEAR_OPTIONS.map((year) => <option key={`to-${year}`} value={year}>{year}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                onClick={handleProcessLinks}
-                disabled={
-                  loading ||
-                  !selectedSyllabusCode.trim() ||
-                  selectedSessions.length === 0 ||
-                  selectedVariants.length === 0
-                }
-                className="w-full border border-[#141414] bg-[#141414] text-white p-2 text-[10px] font-bold uppercase hover:opacity-90 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Generate + Process ({generatedLinkCount} QP links)
-              </button>
-
+              )}
             </div>
-            
-            {status && (
-              <p
-                className={`text-[10px] font-mono text-center text-blue-600 break-words [overflow-wrap:anywhere] ${loading ? 'animate-pulse' : ''}`}
-              >
-                {status}
-              </p>
-            )}
           </section>
         </div>
 
@@ -1783,54 +3071,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* AI Filter Unit */}
-              <div className="border border-[#141414] bg-white p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider">AI Syllabus Filter</h3>
-                  <span className="text-[10px] font-mono opacity-60">1 Filter = 1 request</span>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input 
-                    type="url" 
-                    placeholder="Syllabus PDF URL (e.g. from Cambridge org)" 
-                    className="flex-1 text-xs px-3 py-2 border border-[#141414] disabled:opacity-50"
-                    value={syllabusPdfUrl}
-                    onChange={(e) => setSyllabusPdfUrl(e.target.value)}
-                    disabled={topicsLoading}
-                  />
-                  <button 
-                    onClick={handleFilterWithAI}
-                    disabled={topicsLoading || !user}
-                    className="shrink-0 px-4 py-2 border border-[#141414] bg-[#141414] text-white text-[10px] font-bold uppercase hover:opacity-90 disabled:opacity-50 transition-all"
-                  >
-                    {topicsLoading ? 'Extracting & Mapping...' : 'Auto-Map Questions'}
-                  </button>
-                </div>
 
-                {!user && (
-                   <p className="text-[10px] font-mono text-red-700">Login required to use the AI filter limits.</p>
-                )}
-                {topicsError && (
-                   <p className="text-[10px] font-mono text-red-700">{topicsError}</p>
-                )}
-
-                {topics.length > 0 && (
-                  <div className="pt-3 border-t border-[#141414] border-opacity-10">
-                    <label className="text-[10px] font-mono uppercase opacity-70 block mb-1">Filter by Topic:</label>
-                    <select 
-                      className="w-full text-xs px-2 py-1.5 border border-[#141414]"
-                      value={selectedTopicFilter}
-                      onChange={(e) => setSelectedTopicFilter(e.target.value)}
-                    >
-                      <option value="">All Topics</option>
-                      {topics.map(t => (
-                        <option key={t.unitId} value={t.unitId}>{t.unitId} - {t.title}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
 
               <div className="grid gap-4">
                 {filteredQuestions.map((q) => (
@@ -1839,11 +3080,37 @@ export default function App() {
                     onClick={() => {
                       if (isPhoneDevice()) openMobileViewerForQuestion(q);
                     }}
-                    className={`group relative bg-white border border-[#141414] p-6 transition-all ${isPhoneDevice() ? 'cursor-pointer hover:shadow-lg' : ''}`}
+                    className={`group relative bg-white border border-[#141414] p-6 transition-all ${isPhoneDevice() ? 'cursor-pointer hover:shadow-lg' : ''} ${selectedQuestionIds.includes(q.id) ? 'shadow-[4px_4px_0px_#2563eb1a] border-blue-600/30' : ''}`}
                   >
-                    <div className="flex items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl font-serif font-bold italic text-[#141414]">Q{q.number}</span>
+                    {sidebarTab === 'export' && (
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedQuestionIds(prev => 
+                            prev.includes(q.id) ? prev.filter(id => id !== q.id) : [...prev, q.id]
+                          );
+                        }}
+                        className={`absolute top-6 right-6 w-6 h-6 border-2 border-[#141414] flex items-center justify-center cursor-pointer transition-colors z-10 ${
+                          selectedQuestionIds.includes(q.id) ? 'bg-[#141414] border-[#141414]' : 'bg-white border-opacity-20 hover:border-opacity-100'
+                        }`}
+                      >
+                        {selectedQuestionIds.includes(q.id) && (
+                          <Check className="w-4 h-4 text-white" />
+                        )}
+                      </div>
+                    )}
+
+                    {selectedTopicFilters.length > 0 && q.topicId && !/^\d{4}$/.test(q.topicId) && (
+                      <div className="absolute top-0 left-0 bg-[#2563eb] text-white px-4 py-1.5 text-[11px] font-bold font-mono border-b border-r border-[#2563eb] z-10 shadow-sm">
+                        {q.topicId}
+                      </div>
+                    )}
+
+                    <div className="flex items-start mb-4 mt-2">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-2xl font-serif font-bold italic text-[#141414]">
+                          {selectedTopicFilters.length > 0 && q.label ? `Q${q.label}` : `Q${q.number}`}
+                        </span>
                         <div className="flex flex-col min-w-0">
                           <span
                             className="text-xs font-bold uppercase tracking-tight bg-gray-100 px-3 py-1.5 inline-block max-w-[min(100%,360px)] truncate font-mono normal-case"
@@ -1851,11 +3118,6 @@ export default function App() {
                           >
                             {q.paperId}
                           </span>
-                          {questionTopicMappings[q.id] && (
-                            <span className="text-[10px] bg-[#141414] text-white px-2 py-0.5 mt-1 inline-block w-max rounded-sm">
-                              Topic: {questionTopicMappings[q.id]}
-                            </span>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1877,24 +3139,44 @@ export default function App() {
                         >
                           Show Question
                         </summary>
-                        <div className="mt-3 space-y-3">
-                          {q.questionImages.map((img, idx) => (
-                            <img
-                              key={`${q.id}-qp-${idx}`}
-                              src={img}
-                              alt={`Question ${q.number}`}
-                              className="w-[60%] lg:w-[70%] border border-[#141414] border-opacity-10 cursor-zoom-in"
-                              loading="lazy"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (isPhoneDevice()) {
-                                  setMobileCompareViewer(buildMobileComparePayload(q));
-                                } else {
-                                  openPreview(q.questionImages || [img], idx);
-                                }
-                              }}
-                            />
-                          ))}
+                        <div className="mt-3 space-y-4">
+                          {q.parts && q.parts.length > 1 ? (
+                            q.parts.map((part, partIdx) => (
+                              <div key={`${q.id}-part-${partIdx}`} className="space-y-2">
+                                {part.topicId && (
+                                  <span className="text-[10px] font-bold font-mono bg-[#2563eb] text-white px-2 py-0.5 inline-block mb-1">{part.topicId}</span>
+                                )}
+                                {part.questionImages?.map((img, idx) => (
+                                  <img
+                                    key={`${q.id}-part-${partIdx}-${idx}`}
+                                    src={img}
+                                    alt={`Question ${q.number}`}
+                                    className="w-[60%] lg:w-[70%] border border-[#141414] border-opacity-10 cursor-zoom-in block"
+                                    loading="lazy"
+                                    onClick={(e) => { e.stopPropagation(); openPreview(part.questionImages!, idx); }}
+                                  />
+                                ))}
+                              </div>
+                            ))
+                          ) : (
+                            q.questionImages.map((img, idx) => (
+                              <img
+                                key={`${q.id}-qp-${idx}`}
+                                src={img}
+                                alt={`Question ${q.number}`}
+                                className="w-[60%] lg:w-[70%] border border-[#141414] border-opacity-10 cursor-zoom-in"
+                                loading="lazy"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isPhoneDevice()) {
+                                    setMobileCompareViewer(buildMobileComparePayload(q));
+                                  } else {
+                                    openPreview(q.questionImages || [img], idx);
+                                  }
+                                }}
+                              />
+                            ))
+                          )}
                         </div>
                       </details>
                     ) : !isPhoneDevice() && q.questionImage ? (
@@ -2007,51 +3289,58 @@ export default function App() {
         </div>
       </main>
 
-      <footer className="mt-12 border-t border-[#141414] p-8 bg-white flex flex-col items-center justify-center gap-4">
-        <p className="text-[10px] font-mono uppercase tracking-widest opacity-50">
-          Powered by GPT-5 Nano & PapaCambridge
+      <footer className="mt-12 border-t border-[#141414] p-8 bg-white flex flex-row items-center justify-between gap-6">
+        <p className="text-xs text-gray-400 font-mono whitespace-nowrap">
+          Paperra &copy; 2026
         </p>
-        <a 
-          href="https://www.linkedin.com/in/zunnoon-jawad-3b236a37b/" 
-          target="_blank" 
-          rel="noreferrer"
-           className="opacity-50 hover:opacity-100 transition-opacity"
-        >
-          <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-            <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-          </svg>
-        </a>
+        <div className="flex items-center">
+          <a 
+            href="https://www.linkedin.com/in/zunnoon-jawad-3b236a37b/" 
+            target="_blank" 
+            rel="noreferrer"
+            className="opacity-50 hover:opacity-100 transition-opacity"
+          >
+            <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+              <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+            </svg>
+          </a>
+        </div>
       </footer>
 
-      {previewImages && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"
-          onClick={closePreview}
-        >
+      <AnimatePresence>
+        {previewImages && (
           <div
-            className="relative max-w-[95vw] max-h-[95vh] lg:max-w-[76vw] lg:max-h-[76vh]"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={closePreview}
           >
-            <button
-              className="absolute -top-10 right-0 text-white hover:text-gray-200"
-              onClick={closePreview}
-              aria-label="Close preview"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="relative max-w-[95vw] max-h-[95vh] lg:max-w-[76vw] lg:max-h-[76vh]"
+              onClick={(e) => e.stopPropagation()}
             >
-              <X className="w-7 h-7" />
-            </button>
-            <img
-              src={previewImages[previewIndex]}
-              alt="Preview"
-              className="max-w-[95vw] max-h-[95vh] lg:max-w-[76vw] lg:max-h-[76vh] object-contain border border-white/20 bg-white"
-            />
-            {previewImages.length > 1 && (
-              <p className="text-white/80 text-xs text-center mt-2">
-                {previewIndex + 1} / {previewImages.length}
-              </p>
-            )}
+              <button
+                className="absolute -top-10 right-0 text-white hover:text-gray-200"
+                onClick={closePreview}
+                aria-label="Close preview"
+              >
+                <X className="w-7 h-7" />
+              </button>
+              <img
+                src={previewImages[previewIndex]}
+                alt="Preview"
+                className="max-w-[95vw] max-h-[95vh] lg:max-w-[76vw] lg:max-h-[76vh] object-contain border border-white/20 bg-white"
+              />
+              {previewImages.length > 1 && (
+                <p className="text-white/80 text-xs text-center mt-2">
+                  {previewIndex + 1} / {previewImages.length}
+                </p>
+              )}
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {mobileCompareViewer && (
@@ -2146,7 +3435,213 @@ export default function App() {
       <UserAuthModal 
         open={userModalOpen} 
         onClose={() => setUserModalOpen(false)} 
-        onLoginSuccess={(u) => setUser(u)} 
+        onLoginSuccess={handleLoginSuccess}
+        mode={userModalMode}
+      />
+      <AnimatePresence>
+        {showPricingModal && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white border-2 border-[#141414] p-8 shadow-2xl w-full max-w-sm relative"
+            >
+              <button 
+                onClick={() => setShowPricingModal(false)}
+                className="absolute top-4 right-4 text-[#141414] hover:opacity-60"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <h2 className="text-xl font-bold uppercase tracking-widest mb-6 border-b-2 border-[#141414] pb-2">
+                Current Rates
+              </h2>
+              
+              <div className="space-y-6">
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between font-bold text-sm">
+                     <span className="uppercase tracking-wide">Question Extraction</span>
+                     <span className="text-blue-600 font-mono">1 Token / Paper</span>
+                  </div>
+                  <p className="text-[11px] font-mono opacity-70 leading-relaxed">
+                    Parsing exam papers and extracting questions from the Cambridge database.
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-4 border-t border-[#141414]/10">
+                  <div className="flex items-center justify-between font-bold text-sm">
+                     <span className="uppercase tracking-wide">Topicwise AI Filter</span>
+                     <span className="text-blue-600 font-mono">10 Tokens / Filter</span>
+                  </div>
+                  <p className="text-[11px] font-mono opacity-70 leading-relaxed">
+                    Deep AI classification of extracted questions by specific syllabus units.
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-4 border-t border-[#141414]/10">
+                  <div className="flex items-center justify-between font-bold text-sm">
+                     <span className="uppercase tracking-wide">Requests</span>
+                     <span className="text-blue-600 font-mono">5 Tokens</span>
+                  </div>
+                  <p className="text-[11px] font-mono opacity-70 leading-relaxed">
+                    Feature requests & subject additions: Blocked for Free. Available for Starter and Pro.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showInfoModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              className="bg-white border-2 border-[#141414] p-8 shadow-2xl w-full max-w-md relative sm:max-h-[85vh] overflow-y-auto"
+            >
+              <button 
+                onClick={() => setShowInfoModal(false)}
+                className="absolute top-4 right-4 text-[#141414] hover:opacity-60"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <h2 className="text-xl font-bold uppercase tracking-widest mb-6 border-b-2 border-[#141414] pb-2">
+                What is Paperra?
+              </h2>
+              
+              <div className="space-y-6">
+                <p className="text-sm border-l-4 border-blue-600 pl-4 py-1 font-medium bg-blue-50/50 italic leading-relaxed">
+                  Paperra is an AI-powered extraction engine designed to help teachers and students find specific questions from Cambridge past papers in seconds.
+                </p>
+
+                <div className="space-y-4">
+                  <h3 className="text-[10px] font-bold uppercase tracking-widest opacity-50">How to use</h3>
+                  
+                  <div className="space-y-3">
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-none border-2 border-[#141414] flex items-center justify-center font-bold text-xs bg-white">1</div>
+                      <div>
+                        <p className="font-bold text-sm uppercase text-blue-600">Source</p>
+                        <p className="text-[11px] opacity-70 font-mono">Select your syllabus, year range, and exam variants in the Source Tab.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-none border-2 border-[#141414] flex items-center justify-center font-bold text-xs bg-white">2</div>
+                      <div>
+                        <p className="font-bold text-sm uppercase text-blue-600">Generate</p>
+                        <p className="text-[11px] opacity-70 font-mono">Click 'Generate'. Paperra will find and parse every question from matching past papers with its corresponding mark scheme.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-none border-2 border-[#141414] flex items-center justify-center font-bold text-xs bg-white">3</div>
+                      <div>
+                        <p className="font-bold text-sm uppercase text-blue-600">Filter</p>
+                        <p className="text-[11px] opacity-70 font-mono">Use the Filter Tab to automatically categorize every extracted question by specific syllabus topics.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-none border-2 border-[#141414] flex items-center justify-center font-bold text-xs bg-white">4</div>
+                      <div>
+                        <p className="font-bold text-sm uppercase text-blue-600">History</p>
+                        <p className="text-[11px] opacity-70 font-mono">Review questions on-screen or restore them later from your 'History' tab in your Profile.</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-none border-2 border-[#141414] flex items-center justify-center font-bold text-xs bg-white">5</div>
+                      <div>
+                        <p className="font-bold text-sm uppercase text-blue-600">Export</p>
+                        <p className="text-[11px] opacity-70 font-mono">Select specific questions and export them as a high-quality PDF document (Pro only).</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-4">
+                      <div className="flex-shrink-0 w-6 h-6 rounded-none border-2 border-[#141414] flex items-center justify-center font-bold text-xs bg-white">6</div>
+                      <div>
+                        <p className="font-bold text-sm uppercase text-blue-600">Request</p>
+                        <p className="text-[11px] opacity-70 font-mono">Need a syllabus or feature? Submit a request to the team via your Profile tab.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-[#141414]/10">
+                  <p className="text-[10px] font-mono text-center opacity-40 uppercase tracking-tighter">
+                    Built for speed. Powered by AI.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AlertModal 
+        message={alertMessage} 
+        onClose={() => { setAlertMessage(null); setAlertCanUpgrade(false); setAlertType('error'); }} 
+        onUpgrade={alertCanUpgrade ? () => setShowShopModal(true) : undefined}
+        type={alertType}
+      />
+
+      <ProfileModal 
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        user={user}
+        onLogout={handleLogout}
+        onOpenHistory={() => setUserHistoryOpen(true)}
+        onOpenAdmin={() => setAdminOpen(true)}
+        onAlert={setAlertMessage}
+        onAlertUpgrade={(msg: string) => { setAlertMessage(msg); setAlertCanUpgrade(true); }}
+        onUpgrade={() => { setShowProfileModal(false); setShowShopModal(true); }}
+        onOpenRequest={() => setShowRequestModal(true)}
+        onOpenBugReport={() => setShowBugReportModal(true)}
+        onRefresh={refreshUserData}
+      />
+
+      <BugReportModal 
+        isOpen={showBugReportModal}
+        onClose={() => setShowBugReportModal(false)}
+        user={user}
+        onAlert={setAlertMessage}
+      />
+
+      <RequestModal 
+        isOpen={showRequestModal}
+        onClose={() => setShowRequestModal(false)}
+        user={user}
+        onUpdateTokens={(newCount) => user && setAuthState({ ...user, tokens: newCount })}
+        onAlert={setAlertMessage}
+        onAlertUpgrade={(msg: string) => { setAlertMessage(msg); setAlertCanUpgrade(true); }}
+      />
+
+      <ShopModal
+        isOpen={showShopModal}
+        onClose={() => setShowShopModal(false)}
+        user={user}
+        onUpdateTokens={(newCount) => user && setAuthState({ ...user, tokens: newCount })}
+        onOpenAuth={() => setUserModalOpen(true)}
+        onAlert={setAlertMessage}
+        onOpenInfo={() => setShowPricingModal(true)}
+      />
+
+      <WelcomeModal
+        isOpen={showWelcomeModal}
+        onClose={() => setShowWelcomeModal(false)}
+        tokens={15}
+      />
+      <WelcomeModal
+        isOpen={showGuestWelcome}
+        onClose={() => setShowGuestWelcome(false)}
+        tokens={3}
       />
     </div>
   );

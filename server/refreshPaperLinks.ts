@@ -217,10 +217,12 @@ INSERT OR IGNORE INTO expected_paper_slot (
 ) VALUES (?, ?, ?, ?, ?, 1, 1)
 `;
 
-const UPSERT_SYLLABUS_REFRESH = `
-INSERT INTO syllabus_catalog_refresh (qualification_level, syllabus_code, last_refresh_at)
-VALUES (?, ?, datetime('now'))
-ON CONFLICT(qualification_level, syllabus_code) DO UPDATE SET last_refresh_at = datetime('now')
+const UPSERT_SYLLABUS_DATA = `
+INSERT INTO syllabus_data (syllabus_code, qualification_level, variants_json, last_refresh_at)
+VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+ON CONFLICT(syllabus_code) DO UPDATE SET 
+  variants_json = excluded.variants_json,
+  last_refresh_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 `;
 
 export function estimateRefreshUrlCount(params: RefreshParams): number {
@@ -245,22 +247,9 @@ function resolveSyllabi(params: RefreshParams): { code: string; level: Qualifica
   return out;
 }
 
-/** One statement per syllabus; deduped. Appended to each URL batch so `last_refresh_at` updates even if a later batch fails. */
-function buildSyllabusRefreshStatements(
-  syllabi: { code: string; level: QualificationLevel }[]
-): { sql: string; args: (string | number | null)[] }[] {
-  const seen = new Set<string>();
-  const out: { sql: string; args: (string | number | null)[] }[] = [];
-  for (const s of syllabi) {
-    const k = `${s.level}:${s.code}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push({
-      sql: UPSERT_SYLLABUS_REFRESH,
-      args: [s.level, s.code],
-    });
-  }
-  return out;
+/** No longer using separate syllabus_catalog_refresh table; handled in syllabus_data */
+function buildSyllabusRefreshStatements(): { sql: string; args: (string | number | null)[] }[] {
+  return [];
 }
 
 export async function runLinkRefresh(
@@ -347,7 +336,7 @@ export async function runLinkRefresh(
   let errors = 0;
 
   const CONCURRENCY = 1000;
-  const syllabusRefreshStmts = buildSyllabusRefreshStatements(syllabi);
+  const syllabusRefreshStmts = buildSyllabusRefreshStatements();
 
   async function runOne(task: Task): Promise<void> {
     const { row } = task;
@@ -357,52 +346,62 @@ export async function runLinkRefresh(
     row.last_error = check.error;
   }
 
+  // Map to store temporary state: SyllabusCode -> Year -> Session -> Set<Variant>
+  const syllabusLinkMap = new Map<string, Record<number, Record<string, Set<string>>>>();
+
   for (let i = 0; i < tasks.length; i += CONCURRENCY) {
     const slice = tasks.slice(i, i + CONCURRENCY);
     await Promise.all(slice.map((t) => runOne(t)));
     for (const t of slice) {
       const r = t.row;
       const ok = r.is_available === 1;
-      if (r.paper_type === "qp") {
-        if (ok) qpAvailable += 1;
-        else qpMissing += 1;
+      if (ok && r.paper_type === "qp") {
+        qpAvailable += 1;
+        let sylObj = syllabusLinkMap.get(r.syllabus_code);
+        if (!sylObj) {
+          sylObj = {};
+          syllabusLinkMap.set(r.syllabus_code, sylObj);
+        }
+        if (!sylObj[r.year]) sylObj[r.year] = {};
+        if (!sylObj[r.year][r.session_code]) sylObj[r.year][r.session_code] = new Set();
+        sylObj[r.year][r.session_code].add(r.variant);
+      } else if (ok) {
+        msAvailable += 1;
       } else {
-        if (ok) msAvailable += 1;
+        if (r.paper_type === "qp") qpMissing += 1;
         else msMissing += 1;
+        if (r.http_status === 0) errors += 1;
       }
-      if (!ok && r.http_status === 0) errors += 1;
     }
     done += slice.length;
     onProgress?.(done, total);
+  }
 
-    const batch: { sql: string; args: (string | number | null)[] }[] = [];
-    for (const t of slice) {
-      const [level, code, year, session, variant] = t.expectedArgs;
-      batch.push({
-        sql: INSERT_EXPECTED,
-        args: [level, code, year, session, variant],
-      });
-      const r = t.row;
-      batch.push({
-        sql: UPSERT_CHECK,
-        args: [
-          r.qualification_level,
-          r.syllabus_code,
-          r.year,
-          r.session_code,
-          r.variant,
-          r.paper_type,
-          r.filename,
-          r.url,
-          r.is_available,
-          r.http_status,
-          r.last_error,
-        ],
-      });
+  const batch: { sql: string; args: (string | number | null)[] }[] = [];
+  for (const [sCode, yearsObj] of syllabusLinkMap.entries()) {
+    // Resolve level from the task list (any matching task will do)
+    const level = tasks.find(t => t.row.syllabus_code === sCode)?.row.qualification_level || '';
+    
+    // Transform Set to Array for JSON
+    const finalObj: Record<number, Record<string, string[]>> = {};
+    for (const [yr, sessions] of Object.entries(yearsObj)) {
+      finalObj[Number(yr)] = {};
+      for (const [sess, vset] of Object.entries(sessions)) {
+        finalObj[Number(yr)][sess] = Array.from(vset).sort();
+      }
     }
-    for (const stmt of syllabusRefreshStmts) {
-      batch.push(stmt);
-    }
+
+    batch.push({
+      sql: UPSERT_SYLLABUS_DATA,
+      args: [sCode, level, JSON.stringify(finalObj)]
+    });
+  }
+
+  for (const stmt of syllabusRefreshStmts) {
+    batch.push(stmt);
+  }
+  
+  if (batch.length > 0) {
     await batchWriteWithRetry(db, batch);
   }
 

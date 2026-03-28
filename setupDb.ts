@@ -17,22 +17,28 @@ async function run() {
   }
 
   try {
-    console.log('Creating users table...');
+    console.log('Initializing optimized tables...');
+    
+    // Users table
     await client.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password_hash TEXT NOT NULL,
-        filter_limit INTEGER DEFAULT 10,
+        tokens INTEGER DEFAULT 15,
+        subscription_json TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
-      
-      CREATE TABLE IF NOT EXISTS question_topics (
-        question_id TEXT PRIMARY KEY,
-        unit_id TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      );
+      )
     `);
+
+    // New paper-centric storage
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS paper_questions_data (
+        paper_id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL
+      )
+    `);
+
     console.log('Success! Table initialized.');
     process.exit(0);
   } catch (err: any) {

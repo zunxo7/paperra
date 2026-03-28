@@ -17,12 +17,11 @@ async function run() {
   }
 
   try {
-    console.log('Creating question_topics table...');
+    console.log('Creating paper_questions_data table...');
     await client.execute(`
-      CREATE TABLE IF NOT EXISTS question_topics (
-        question_id TEXT PRIMARY KEY,
-        unit_id TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      CREATE TABLE IF NOT EXISTS paper_questions_data (
+        paper_id TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL
       )
     `);
     console.log('Success! Table initialized.');

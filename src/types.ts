@@ -25,10 +25,19 @@ export const SYLLABUS_TOPICS = [
   { id: "10", title: "Boolean logic", description: "Logic gates (NOT, AND, OR, NAND, NOR, XOR), truth tables, logic circuits, logic expressions" }
 ];
 
+export interface QuestionPart {
+  label?: string;
+  topicId?: string;
+  questionImages?: string[];
+  markingSchemeImages?: string[];
+  text?: string;
+}
+
 export interface Question {
   id: string;
   paperId: string;
   number: number;
+  label?: string;
   text: string;
   marks: number;
   topicId: string;
@@ -38,6 +47,7 @@ export interface Question {
   markingScheme?: string;
   markingSchemeImage?: string;
   markingSchemeImages?: string[];
+  parts?: QuestionPart[];
 }
 
 export interface PaperMetadata {
