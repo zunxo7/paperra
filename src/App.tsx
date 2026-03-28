@@ -2115,7 +2115,7 @@ export default function App() {
           `<img src="${src}" style="width:100%;display:block;" loading="eager" />`;
         const makeBadge = (tid: string) => {
           const title = topics.find(t => t.unitId === tid)?.title;
-          return `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:9px;font-weight:700;font-family:monospace;letter-spacing:0.5px;padding:4px 12px;margin-bottom:6px;line-height:1.2;word-break:break-word;max-width:100%;">${esc(tid)}${title ? ' · ' + esc(title) : ''}</span>`;
+          return `<span style="display:inline-block;background:#2563eb;color:#fff;font-size:10px;font-weight:700;font-family:helvetica,sans-serif;letter-spacing:0px;padding:6px 14px;margin-bottom:6px;line-height:1.4;word-break:break-word;max-width:100%;">${esc(tid)}${title ? ' · ' + esc(title) : ''}</span>`;
         };
 
         // Build per-part image blocks with individual topic badges
@@ -2159,6 +2159,7 @@ export default function App() {
             <div style="font-size:8px;font-weight:700;letter-spacing:2.5px;color:#141414;opacity:0.4;margin-bottom:10px;font-family:monospace;">&#9654; QUESTION</div>
             ${qImagesHtml}
           </td></tr>
+          <tr><td style="padding:0;"><div style="background:#2563eb;color:#fff;padding:12px 20px;text-align:center;font-size:10px;font-weight:700;letter-spacing:2px;font-family:helvetica,sans-serif;cursor:pointer;">SHOW MARK SCHEME</div></td></tr>
         </table>`,
           msHtml: msTableHtml
         };
@@ -2354,32 +2355,29 @@ ${msAtEndHtml}
           }
         }
 
-        // Add "SHOW MARK SCHEME" button overlay on each question card
+        // Add link annotations on rendered "SHOW MARK SCHEME" buttons
         const questionsElRect2 = questionsEl.getBoundingClientRect();
-        const btnH = 9; // mm height of button
         for (let i = 0; i < exportParts.length; i++) {
           const msPage = msPageByQIdx[i];
           if (!msPage) continue;
           const tableEl = questionsEl.querySelector(`table[data-qi="${i}"]`) as HTMLElement | null;
           if (!tableEl) continue;
-          const tableRect = tableEl.getBoundingClientRect();
-          // Bottom of the card in questionsEl-relative px, scaled for canvas scale=2
-          const cardBottomPx = (tableRect.bottom - questionsElRect2.top) * 2;
-          const pageIdx = Math.floor(cardBottomPx / sliceHeightPx);
-          const yWithinPagePx = cardBottomPx % sliceHeightPx;
-          const cardBottomMm = (yWithinPagePx / sliceHeightPx) * pdfH;
+          // Get the last row (button row)
+          const rows = Array.from(tableEl.querySelectorAll('tr')) as HTMLElement[];
+          const btnRow = rows[rows.length - 1];
+          if (!btnRow) continue;
+          const btnRect = btnRow.getBoundingClientRect();
+          // Button position relative to questionsEl, scaled for canvas scale=2
+          const btnTopPx = (btnRect.top - questionsElRect2.top) * 2;
+          const btnBottomPx = (btnRect.bottom - questionsElRect2.top) * 2;
+          const pageIdx = Math.floor(btnTopPx / sliceHeightPx);
+          const yWithinPagePx = btnTopPx % sliceHeightPx;
+          const btnTopMm = (yWithinPagePx / sliceHeightPx) * pdfH;
+          const btnHeightMm = ((btnBottomPx - btnTopPx) / sliceHeightPx) * pdfH;
           const pdfPageNum = 2 + pageIdx;
           if (pdfPageNum > pdf.getNumberOfPages()) continue;
           pdf.setPage(pdfPageNum);
-          // Draw blue button bar
-          const btnY = cardBottomMm - btnH;
-          pdf.setFillColor(37, 99, 235);
-          pdf.rect(0, Math.max(0, btnY), pdfW, btnH, 'F');
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(7);
-          pdf.setTextColor(255, 255, 255);
-          pdf.text('SHOW MARK SCHEME', pdfW / 2, Math.max(0, btnY) + 5.8, { align: 'center' });
-          pdf.link(0, Math.max(0, btnY), pdfW, btnH, { pageNumber: msPage });
+          pdf.link(0, btnTopMm, pdfW, btnHeightMm, { pageNumber: msPage });
         }
       }
 
