@@ -2324,7 +2324,9 @@ ${msAtEndHtml}
       // Render all MS pages batched together (tightly packed like QP), then add link annotations
       if (interleavedMsParts.length > 0) {
         const msPageByQIdx: Record<number, number> = {};
+        const msCardYMm: Record<number, number> = {};
         const qPageByQIdx: Record<number, number> = {};
+        const qCardYMm: Record<number, number> = {};
 
         // Calculate which PDF page each question card is on
         const questionsElRect3 = questionsEl.getBoundingClientRect();
@@ -2334,6 +2336,7 @@ ${msAtEndHtml}
           const tableRect = tableEl.getBoundingClientRect();
           const cardTopPx = (tableRect.top - questionsElRect3.top) * 2;
           qPageByQIdx[i] = 2 + Math.floor(cardTopPx / sliceHeightPx);
+          qCardYMm[i] = (cardTopPx % sliceHeightPx) / sliceHeightPx * pdfH;
         }
 
         // Batch all MS HTML into one container (tightly packed)
@@ -2364,6 +2367,7 @@ ${msAtEndHtml}
           const tableRect = tableEl.getBoundingClientRect();
           const cardTopPx = (tableRect.top - msBatchRect.top) * 2;
           msPageByQIdx[idx] = msBatchStartPage + Math.floor(cardTopPx / sliceHeightPx);
+          msCardYMm[idx] = (cardTopPx % sliceHeightPx) / sliceHeightPx * pdfH;
         }
 
         // Render batch canvas and slice into pages
@@ -2381,7 +2385,7 @@ ${msAtEndHtml}
           msYOffset += sliceH;
         }
 
-        // Add back button link annotations
+        // Add back button link annotations (handle cross-page split)
         for (const { idx } of interleavedMsParts) {
           if (!qPageByQIdx[idx]) continue;
           const tableEl = msBatchWrap.querySelector(`table[data-msi="${idx}"]`) as HTMLElement | null;
@@ -2395,13 +2399,23 @@ ${msAtEndHtml}
           const yWithinPagePx = backBtnTopPx % sliceHeightPx;
           const pdfPageNum = msBatchStartPage + pageIdx;
           if (pdfPageNum > pdf.getNumberOfPages()) continue;
+          const btnYMm = (yWithinPagePx / sliceHeightPx) * pdfH;
+          const btnHMm = ((backBtnBottomPx - backBtnTopPx) / sliceHeightPx) * pdfH;
+          const dest = { pageNumber: qPageByQIdx[idx], top: qCardYMm[idx] ?? 0 };
           pdf.setPage(pdfPageNum);
-          pdf.link(0, (yWithinPagePx / sliceHeightPx) * pdfH, pdfW, ((backBtnBottomPx - backBtnTopPx) / sliceHeightPx) * pdfH, { pageNumber: qPageByQIdx[idx] });
+          const cappedH = Math.min(btnHMm, pdfH - btnYMm);
+          pdf.link(0, btnYMm, pdfW, cappedH, dest);
+          // If button overflows onto next page, add annotation there too
+          const overflowH = btnHMm - cappedH;
+          if (overflowH > 0.5 && pdfPageNum + 1 <= pdf.getNumberOfPages()) {
+            pdf.setPage(pdfPageNum + 1);
+            pdf.link(0, 0, pdfW, overflowH, dest);
+          }
         }
 
         document.body.removeChild(msBatchWrap);
 
-        // Add "SHOW MARK SCHEME" link annotations
+        // Add "SHOW MARK SCHEME" link annotations (handle cross-page split)
         const questionsElRect2 = questionsEl.getBoundingClientRect();
         for (let i = 0; i < exportParts.length; i++) {
           const msPage = msPageByQIdx[i];
@@ -2418,8 +2432,18 @@ ${msAtEndHtml}
           const yWithinPagePx = btnTopPx % sliceHeightPx;
           const pdfPageNum = 2 + pageIdx;
           if (pdfPageNum > pdf.getNumberOfPages()) continue;
+          const btnYMm = (yWithinPagePx / sliceHeightPx) * pdfH;
+          const btnHMm = ((btnBottomPx - btnTopPx) / sliceHeightPx) * pdfH;
+          const dest = { pageNumber: msPage, top: msCardYMm[i] ?? 0 };
           pdf.setPage(pdfPageNum);
-          pdf.link(0, (yWithinPagePx / sliceHeightPx) * pdfH, pdfW, ((btnBottomPx - btnTopPx) / sliceHeightPx) * pdfH, { pageNumber: msPage });
+          const cappedH = Math.min(btnHMm, pdfH - btnYMm);
+          pdf.link(0, btnYMm, pdfW, cappedH, dest);
+          // If button overflows onto next page, add annotation there too
+          const overflowH = btnHMm - cappedH;
+          if (overflowH > 0.5 && pdfPageNum + 1 <= pdf.getNumberOfPages()) {
+            pdf.setPage(pdfPageNum + 1);
+            pdf.link(0, 0, pdfW, overflowH, dest);
+          }
         }
       }
 
